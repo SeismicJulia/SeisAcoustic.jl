@@ -1,2 +1,2 @@
 # SeisAcoustic
-Julia package for elastic wave simulation and imaging
+Julia package for acoustic wave simulation and imaging
