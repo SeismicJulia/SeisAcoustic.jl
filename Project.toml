@@ -1,6 +1,8 @@
-authors = ["WneleiGao <wgao1@ualberta.ca>"]
 name = "SeisAcoustic"
 uuid = "074d4264-4c35-11e9-15e7-b90d08053d64"
+authors = ["WneleiGao <wgao1@ualberta.ca>"]
 version = "0.1.0"
 
 [deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
