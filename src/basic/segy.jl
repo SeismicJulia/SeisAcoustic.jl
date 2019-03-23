@@ -90,7 +90,7 @@ function conversion_between_edbcb_ascii(a::Vector{UInt8}; flag="edbcb2ascii")
 
     end
 
-    return r
+    return convert(Vector{UInt8}, r)
 end
 
 """
@@ -163,9 +163,13 @@ end
 *   unit   : measurement system(1=>meters, 2=>Feet)
 *   pol    : impulse polarity(1=>increase pressure and upward movement is negative number,
                               2=>increase pressure and upward movement is positive number)
+*   vpol   : Vibratory polarity code
+*   fvn    : file reversion number
+*   fltf   : fixed trace length flag
 *   netfh  : number of extended text file header(0=> no extende, -1=>variable, positive=>exactly that many)
 """
 mutable struct FileHeader
+# corresponding to 3200-3259
 	  jobid  :: Int32
 	  linnum :: Int32
 	  renum  :: Int32
@@ -193,11 +197,13 @@ mutable struct FileHeader
 	  unit   :: Int16
 	  pol    :: Int16
 	  vpol   :: Int16
-	  fvn    :: Int16
-	  fltf   :: Int16
-	  netfh  :: Int16
+# 3260-3501 is unsigned, need to skip 242 byte
+	  fltf   :: Int16 # 3502-3503
+	  netfh  :: Int16 # 3504-3505
+# then skip 94 byte to the start point of trace header
 end
 
+# record the start position of file header item
 const file_header_location = Dict(
       :jobid   => 3200,
       :linnum  => 3204,
@@ -226,14 +232,15 @@ const file_header_location = Dict(
       :unit    => 3254,
       :pol     => 3256,
       :vpol    => 3258,
-      :fvn     => 3500,
-      :fltf    => 3502,
-      :netfh   => 3504);
+# 3260-3501 is unsigned, need to skip 242 byte
+      :fltf    => 3502,  # 3502-3503
+      :netfh   => 3504); # 3504-3505
+  # then skip 94 byte to the start point of trace header
 
 function init_FileHeader()
 	  fhdr = FileHeader(0,0,0,0,0,0,0,0,0,0,
 	                    0,0,0,0,0,0,0,0,0,0,
-	                    0,0,0,0,0,0,0,0,0,0)
+	                    0,0,0,0,0,0,0,0,0,)
 	  return fhdr
 end
 
@@ -336,97 +343,122 @@ function read_file_header(path::String; swap_bytes=true)
 
     stream = open(path, "r")
 
-		position = file_header_location[:jobid]
-		seek(stream,position)
+    # seek to the start point of file header
+		seek(stream, file_header_location[:jobid])
+
+    # initialize a empty file header
 		fhdr = init_FileHeader()
 
-		fhdr.jobid   = read(stream, typeof(fhdr.jobid))
-		fhdr.linnum  = read(stream, typeof(fhdr.linnum))
-		fhdr.renum   = read(stream, typeof(fhdr.renum))
-		fhdr.ntrpe   = read(stream, typeof(fhdr.ntrpe))
-		fhdr.natrpe  = read(stream, typeof(fhdr.natrpe))
-		fhdr.dt      = read(stream, typeof(fhdr.dt))
-		fhdr.dtfr    = read(stream, typeof(fhdr.dtfr))
-		fhdr.ns      = read(stream, typeof(fhdr.ns))
-		fhdr.nsfr    = read(stream, typeof(fhdr.nsfr))
-		fhdr.fmtc    = read(stream, typeof(fhdr.fmtc))
-		fhdr.expf    = read(stream, typeof(fhdr.expf))
-		fhdr.trsc    = read(stream, typeof(fhdr.trsc))
-		fhdr.vsumc   = read(stream, typeof(fhdr.vsumc))
-		fhdr.sfs     = read(stream, typeof(fhdr.sfs))
-		fhdr.sfe     = read(stream, typeof(fhdr.sfe))
-		fhdr.slen    = read(stream, typeof(fhdr.slen))
-		fhdr.styp    = read(stream, typeof(fhdr.styp))
-		fhdr.tnumsc  = read(stream, typeof(fhdr.tnumsc))
-		fhdr.stalens = read(stream, typeof(fhdr.stalens))
-		fhdr.stalene = read(stream, typeof(fhdr.stalene))
-		fhdr.taty    = read(stream, typeof(fhdr.taty))
-		fhdr.corr    = read(stream, typeof(fhdr.corr))
-		fhdr.rgc     = read(stream, typeof(fhdr.rgc))
-		fhdr.arm     = read(stream, typeof(fhdr.arm))
-		fhdr.unit    = read(stream, typeof(fhdr.unit))
-		fhdr.pol     = read(stream, typeof(fhdr.pol))
-		fhdr.vpol    = read(stream, typeof(fhdr.vpol))
-		fhdr.fvn     = read(stream, typeof(fhdr.fvn))
-		fhdr.fltf    = read(stream, typeof(fhdr.fltf))
-		fhdr.netfh   = read(stream, typeof(fhdr.netfh))
+    # read file header items
+    # There are unsigned space in segy file, for loop can't be used
+    fhdr.jobid   = read(stream, typeof(fhdr.jobid))
+    fhdr.linnum  = read(stream, typeof(fhdr.linnum))
+    fhdr.renum   = read(stream, typeof(fhdr.renum))
+    fhdr.ntrpe   = read(stream, typeof(fhdr.ntrpe))
+    fhdr.natrpe  = read(stream, typeof(fhdr.natrpe))
+    fhdr.dt      = read(stream, typeof(fhdr.dt))
+    fhdr.dtfr    = read(stream, typeof(fhdr.dtfr))
+    fhdr.ns      = read(stream, typeof(fhdr.ns))
+    fhdr.nsfr    = read(stream, typeof(fhdr.nsfr))
+    fhdr.fmtc    = read(stream, typeof(fhdr.fmtc))
+    fhdr.expf    = read(stream, typeof(fhdr.expf))
+    fhdr.trsc    = read(stream, typeof(fhdr.trsc))
+    fhdr.vsumc   = read(stream, typeof(fhdr.vsumc))
+    fhdr.sfs     = read(stream, typeof(fhdr.sfs))
+    fhdr.sfe     = read(stream, typeof(fhdr.sfe))
+    fhdr.slen    = read(stream, typeof(fhdr.slen))
+    fhdr.styp    = read(stream, typeof(fhdr.styp))
+    fhdr.tnumsc  = read(stream, typeof(fhdr.tnumsc))
+    fhdr.stalens = read(stream, typeof(fhdr.stalens))
+    fhdr.stalene = read(stream, typeof(fhdr.stalene))
+    fhdr.taty    = read(stream, typeof(fhdr.taty))
+    fhdr.corr    = read(stream, typeof(fhdr.corr))
+    fhdr.rgc     = read(stream, typeof(fhdr.rgc))
+    fhdr.arm     = read(stream, typeof(fhdr.arm))
+    fhdr.unit    = read(stream, typeof(fhdr.unit))
+    fhdr.pol     = read(stream, typeof(fhdr.pol))
+    fhdr.vpol    = read(stream, typeof(fhdr.vpol))
 
+    skip(stream, 242) # skip the unsigned space
+    fhdr.fltf    = read(stream, typeof(fhdr.fltf))
+    fhdr.netfh   = read(stream, typeof(fhdr.netfh))
+
+    # convert endian
     if swap_bytes
-			 for field in fieldnames(fhdr)
-					 setfield!(fhdr, field, bswap(getfield(fhdr, field)))
-			 end
-		end
+    	 for field in fieldnames(FileHeader)
+    			 setfield!(fhdr, field, bswap(getfield(fhdr, field)))
+    	 end
+    end
 
+    # skip to the start point of trace header
+    # skip(stream, 94)
 		close(stream)
+
 	  return fhdr
 end
 
 """
    write 400 byte file header of SEGY file.
 """
-function put_file_header(path::String, fh::FileHeader; swap_bytes=true)
+function put_file_header(path::String, fhdr::FileHeader; swap_bytes=true)
 
-    if swap_bytes
-		   for field in fieldnames(fh)
-				   setfield!(fh, field, bswap(getfield(fh, field)))
-		   end
-	  end
-
+    # the start point for file header
     stream = open(path, "w+")
-	  seek(stream, 3200)
+    seek(stream, file_header_location[:jobid])
 
-	  write(stream, fh.jobid)
-	  write(stream, fh.linnum)
-	  write(stream, fh.renum)
-	  write(stream, fh.ntrpe)
-	  write(stream, fh.natrpe)
-	  write(stream, fh.dt)
-	  write(stream, fh.dtfr)
-	  write(stream, fh.ns)
-	  write(stream, fh.nsfr)
-	  write(stream, fh.fmtc)
-	  write(stream, fh.expf)
-	  write(stream, fh.trsc)
-	  write(stream, fh.vsumc)
-	  write(stream, fh.sfs)
-	  write(stream, fh.sfe)
-	  write(stream, fh.slen)
-	  write(stream, fh.styp)
-	  write(stream, fh.tnumsc)
-	  write(stream, fh.stalens)
-	  write(stream, fh.stalene)
-	  write(stream, fh.taty)
-	  write(stream, fh.corr)
-	  write(stream, fh.rgc)
-	  write(stream, fh.arm)
-	  write(stream, fh.unit)
-	  write(stream, fh.pol)
-	  write(stream, fh.vpol)
-	  write(stream, fh.fvn)
-	  write(stream, fh.fltf)
-	  write(stream, fh.netfh)
+    # initialize a temporary file header
+    # keep the original file header untouch
+    fh = init_FileHeader()
+    if swap_bytes
+       for field in fieldnames(FileHeader)
+           setfield!(fh, field, bswap(getfield(fhdr, field)))
+       end
+    else
+       for field in fieldnames(FileHeader)
+           setfield!(fh, field, getfield(fhdr, field))
+       end
+    end
 
+    # write file header
+    write(stream, fh.jobid)
+    write(stream, fh.linnum)
+    write(stream, fh.renum)
+    write(stream, fh.ntrpe)
+    write(stream, fh.natrpe)
+    write(stream, fh.dt)
+    write(stream, fh.dtfr)
+    write(stream, fh.ns)
+    write(stream, fh.nsfr)
+    write(stream, fh.fmtc)
+    write(stream, fh.expf)
+    write(stream, fh.trsc)
+    write(stream, fh.vsumc)
+    write(stream, fh.sfs)
+    write(stream, fh.sfe)
+    write(stream, fh.slen)
+    write(stream, fh.styp)
+    write(stream, fh.tnumsc)
+    write(stream, fh.stalens)
+    write(stream, fh.stalene)
+    write(stream, fh.taty)
+    write(stream, fh.corr)
+    write(stream, fh.rgc)
+    write(stream, fh.arm)
+    write(stream, fh.unit)
+    write(stream, fh.pol)
+    write(stream, fh.vpol)
+
+    # assign 0 to 242 unsigned bytes
+    write(stream, zeros(Int8, 242))
+
+    # write the last two field
+    write(stream, fh.fltf)
+    write(stream, fh.netfh)
+
+    # assign 0 to 94 unsigned bytes
+    write(stream, zeros(Int8, 94))
     close(stream)
+
     return nothing
 end
 
