@@ -96,7 +96,7 @@ end
 """
    read text header
 """
-function print_text_header(path::String)
+function read_text_header(path::String)
 
     # read the text header as UInt8
 	  fid = open(path, "r")
@@ -109,14 +109,20 @@ function print_text_header(path::String)
     # convert each element to character
 		thdr = convert(Vector{Char}, thdr)
 
-    #print row-by-row and each row consist of 80 character
-		for i = 1 : 40
-			  il = (i-1)*80+1
-				iu = il+80-1
-			  println(join(thdr[il:iu]))
-		end
-
 		return thdr
+end
+
+"""
+   print text header
+"""
+function print_text_header(thdr)
+
+    for i = 1 : 40
+        il = (i-1)*80+1
+        iu = il+80-1
+        println(join(thdr[il:iu]))
+    end
+    return nothing
 end
 
 """
@@ -718,6 +724,7 @@ const trace_header_location = Dict(
     :stype           => 218)
 # 20 bytes gap
 
+# there are 81 fields
 function init_TraceHeader()
 	  h = TraceHeader(
 	  0,0,0,0,0,0,0,0,0,0,
@@ -776,10 +783,6 @@ end
 """
 function read_all_traces_header(path::String; swap_bytes=true)
 
-    println("===================================================================\n")
-		println("=======================Print text header===========================\n")
-		text_header = print_text_header(path)
-
 		file_header = read_file_header(path; swap_bytes=swap_bytes)
 		println("===================================================================\n")
 		println("=======================Print file header===========================\n")
@@ -804,7 +807,7 @@ function read_all_traces_header(path::String; swap_bytes=true)
     fid = open(path, "r")
     seek(fid, file_hsize)
 
-    vector_trace_header = Vector{TraceHeader}(num_traces)
+    vector_trace_header = Vector{TraceHeader}(undef, num_traces)
 		for i = 1 : num_traces
         h = init_TraceHeader()
         h.tracl  = read(fid, Int32)
@@ -892,7 +895,7 @@ function read_all_traces_header(path::String; swap_bytes=true)
         skip(fid, 20 + trace_data_size) # skip 20 bytes and trace data to the begining of next trace
 
         if swap_bytes
-           for field in fieldnames(h)
+           for field in fieldnames(TraceHeader)
                setfield!(h, field, bswap(getfield(h, field)))
            end
         end
@@ -909,153 +912,154 @@ end
 """
 function read_segy_file(path::String; swap_bytes=true, data_format="NULL")
 
-  println("===================================================================\n")
-  println("=======================Print text header===========================\n")
-  text_header = print_text_header(path)
+    text_header = read_text_header(path)
+    println("===================================================================\n")
+    println("=======================Print text header===========================\n")
+    print_text_header(text_header)
 
-  file_header = read_file_header(path; swap_bytes=swap_bytes)
-  println("===================================================================\n")
-  println("=======================Print file header===========================\n")
-  print(file_header)
+    file_header = read_file_header(path; swap_bytes=swap_bytes)
+    println("===================================================================\n")
+    println("=======================Print file header===========================\n")
+    print(file_header)
 
-  if file_header.netfh == -1
-     error("Does not support variable text file header")
-  elseif file_header.netfh == 0
-     file_hsize = 3600
-  elseif file_header.netfh > 0
-     file_hsize = 400 + 3200 * file_header.netfh
-  end
-
-  # compute the number of traces in this file
-  file_size = filesize(path)
-  num_samples = Int64(file_header.ns)
-  trace_data_size = num_samples * 4
-  num_traces  = round(Int64, (file_size - file_hsize) / (240 + trace_data_size))
-  @printf("number of traces in this file                               : %6d\n", num_traces)
-
-  # determine the data format
-  if data_format == "NULL"
-     if file_header.fmtc == 1
-        data_format = "IBM"
-        @printf("data format determined from file header                  : IBM\n")
-     elseif file_header.fmtc == 5
-        data_format = "IEEE"
-        @printf("data format determined from file header                  : IEEE\n")
-     end
-  else
-     @printf("data format determined from keyword input                : %s\n", data_format)
-  end
-
-  fid = open(path, "r")
-  seek(fid, file_hsize)
-
-  trace_header = Vector{TraceHeader}(num_traces)
-  data = zeros(Float32, num_samples, num_traces)
-  for i = 1 : num_traces
-
-    h = init_TraceHeader()
-    h.tracl  = read(fid, Int32)
-    h.tracr  = read(fid, Int32)
-    h.fldr   = read(fid, Int32)
-    h.tracf  = read(fid, Int32)
-    h.ep     = read(fid, Int32)
-    h.cdp    = read(fid, Int32)
-    h.cdpt   = read(fid, Int32)
-    h.trid   = read(fid, Int16)
-    h.nva    = read(fid, Int16)
-    h.nhs    = read(fid, Int16)
-    h.duse   = read(fid, Int16)
-    h.offset = read(fid, Int32)
-    h.gelev  = read(fid, Int32)
-    h.selev  = read(fid, Int32)
-    h.sdepth = read(fid, Int32)
-    h.gdel   = read(fid, Int32)
-    h.sdel   = read(fid, Int32)
-    h.swdep  = read(fid, Int32)
-    h.gwdep  = read(fid, Int32)
-    h.scalel = read(fid, Int16)
-    h.scalco = read(fid, Int16)
-    h.sx     = read(fid, Int32)
-    h.sy     = read(fid, Int32)
-    h.gx     = read(fid, Int32)
-    h.gy     = read(fid, Int32)
-    h.counit = read(fid, Int16)
-    h.wevel  = read(fid, Int16)
-    h.swevel = read(fid, Int16)
-    h.sut    = read(fid, Int16)
-    h.gut    = read(fid, Int16)
-    h.sstat  = read(fid, Int16)
-    h.gstat  = read(fid, Int16)
-    h.tstat  = read(fid, Int16)
-    h.laga   = read(fid, Int16)
-    h.lagb   = read(fid, Int16)
-    h.delrt  = read(fid, Int16)
-    h.muts   = read(fid, Int16)
-    h.mute   = read(fid, Int16)
-    h.ns     = read(fid, Int16)
-    h.dt     = read(fid, Int16)
-    h.gain   = read(fid, Int16)
-    h.igc    = read(fid, Int16)
-    h.igi    = read(fid, Int16)
-    h.corr   = read(fid, Int16)
-    h.sfs    = read(fid, Int16)
-    h.sfe    = read(fid, Int16)
-    h.slen   = read(fid, Int16)
-    h.styp   = read(fid, Int16)
-    h.stas   = read(fid, Int16)
-    h.stae   = read(fid, Int16)
-    h.tatyp  = read(fid, Int16)
-    h.afilf  = read(fid, Int16)
-    h.afils  = read(fid, Int16)
-    h.nofilf = read(fid, Int16)
-    h.nofils = read(fid, Int16)
-    h.lcf    = read(fid, Int16)
-    h.hcf    = read(fid, Int16)
-    h.lcs    = read(fid, Int16)
-    h.hcs    = read(fid, Int16)
-    h.year   = read(fid, Int16)
-    h.day    = read(fid, Int16)
-    h.hour   = read(fid, Int16)
-    h.minute = read(fid, Int16)
-    h.sec    = read(fid, Int16)
-    h.timbas = read(fid, Int16)
-    h.trwf   = read(fid, Int16)
-    h.grnors = read(fid, Int16)
-    h.grnofr = read(fid, Int16)
-    h.grnlof = read(fid, Int16)
-    h.gaps   = read(fid, Int16)
-    h.otrav  = read(fid, Int16)
-    h.CDPx            = read(fid, Int32)
-    h.CDPy            = read(fid, Int32)
-    h.inlineNum       = read(fid, Int32)
-    h.crosslineNum    = read(fid, Int32)
-    h.shotNum         = read(fid, Int32)
-    h.scalarOnShotNum = read(fid, Int16)
-    h.tvmu            = read(fid, Int16)
-    skip(fid, 10) # skip 10 bytes
-    h.didf            = read(fid, Int16)
-    h.scalart         = read(fid, Int16)
-    h.stype           = read(fid, Int16)
-    skip(fid, 20) # skip 20 bytes to the begining of trace data
-
-    if swap_bytes
-       for field in fieldnames(h)
-           setfield!(h, field, bswap(getfield(h, field)))
-       end
+    if file_header.netfh == -1
+       error("Does not support variable text file header")
+    elseif file_header.netfh == 0
+       file_hsize = 3600
+    elseif file_header.netfh > 0
+       file_hsize = 400 + 3200 * file_header.netfh
     end
-    trace_header[i] = h
 
-    if data_format == "IEEE"
-       tmp = read(fid, Float32, num_samples)
-		elseif data_format == "IBM"
-	 		 tmp = read(fid, IBMFloat32, num_samples)
-	 		 tmp = convert(Vector{Float32}, tmp)
-		end
-    data[:,i] = tmp
-  end
+    # compute the number of traces in this file
+    file_size = filesize(path)
+    num_samples = Int64(file_header.ns)
+    trace_data_size = num_samples * 4
+    num_traces  = round(Int64, (file_size - file_hsize) / (240 + trace_data_size))
+    @printf("number of traces in this file                               : %6d\n", num_traces)
 
-  close(fid)
-  return file_header, trace_header, data
+    # determine the data format
+    if data_format == "NULL"
+       if file_header.fmtc == 1
+          data_format = "IBM"
+          @printf("data format determined from file header                  : IBM\n")
+       elseif file_header.fmtc == 5
+          data_format = "IEEE"
+          @printf("data format determined from file header                  : IEEE\n")
+       end
+    else
+       @printf("data format determined from keyword input                : %s\n", data_format)
+    end
+
+    fid = open(path, "r")
+    seek(fid, file_hsize)
+
+    trace_header = Vector{TraceHeader}(undef, num_traces)
+    data = zeros(Float32, num_samples, num_traces)
+    for i = 1 : num_traces
+
+        h = init_TraceHeader()
+        h.tracl  = read(fid, Int32)
+        h.tracr  = read(fid, Int32)
+        h.fldr   = read(fid, Int32)
+        h.tracf  = read(fid, Int32)
+        h.ep     = read(fid, Int32)
+        h.cdp    = read(fid, Int32)
+        h.cdpt   = read(fid, Int32)
+        h.trid   = read(fid, Int16)
+        h.nva    = read(fid, Int16)
+        h.nhs    = read(fid, Int16)
+        h.duse   = read(fid, Int16)
+        h.offset = read(fid, Int32)
+        h.gelev  = read(fid, Int32)
+        h.selev  = read(fid, Int32)
+        h.sdepth = read(fid, Int32)
+        h.gdel   = read(fid, Int32)
+        h.sdel   = read(fid, Int32)
+        h.swdep  = read(fid, Int32)
+        h.gwdep  = read(fid, Int32)
+        h.scalel = read(fid, Int16)
+        h.scalco = read(fid, Int16)
+        h.sx     = read(fid, Int32)
+        h.sy     = read(fid, Int32)
+        h.gx     = read(fid, Int32)
+        h.gy     = read(fid, Int32)
+        h.counit = read(fid, Int16)
+        h.wevel  = read(fid, Int16)
+        h.swevel = read(fid, Int16)
+        h.sut    = read(fid, Int16)
+        h.gut    = read(fid, Int16)
+        h.sstat  = read(fid, Int16)
+        h.gstat  = read(fid, Int16)
+        h.tstat  = read(fid, Int16)
+        h.laga   = read(fid, Int16)
+        h.lagb   = read(fid, Int16)
+        h.delrt  = read(fid, Int16)
+        h.muts   = read(fid, Int16)
+        h.mute   = read(fid, Int16)
+        h.ns     = read(fid, Int16)
+        h.dt     = read(fid, Int16)
+        h.gain   = read(fid, Int16)
+        h.igc    = read(fid, Int16)
+        h.igi    = read(fid, Int16)
+        h.corr   = read(fid, Int16)
+        h.sfs    = read(fid, Int16)
+        h.sfe    = read(fid, Int16)
+        h.slen   = read(fid, Int16)
+        h.styp   = read(fid, Int16)
+        h.stas   = read(fid, Int16)
+        h.stae   = read(fid, Int16)
+        h.tatyp  = read(fid, Int16)
+        h.afilf  = read(fid, Int16)
+        h.afils  = read(fid, Int16)
+        h.nofilf = read(fid, Int16)
+        h.nofils = read(fid, Int16)
+        h.lcf    = read(fid, Int16)
+        h.hcf    = read(fid, Int16)
+        h.lcs    = read(fid, Int16)
+        h.hcs    = read(fid, Int16)
+        h.year   = read(fid, Int16)
+        h.day    = read(fid, Int16)
+        h.hour   = read(fid, Int16)
+        h.minute = read(fid, Int16)
+        h.sec    = read(fid, Int16)
+        h.timbas = read(fid, Int16)
+        h.trwf   = read(fid, Int16)
+        h.grnors = read(fid, Int16)
+        h.grnofr = read(fid, Int16)
+        h.grnlof = read(fid, Int16)
+        h.gaps   = read(fid, Int16)
+        h.otrav  = read(fid, Int16)
+        h.CDPx            = read(fid, Int32)
+        h.CDPy            = read(fid, Int32)
+        h.inlineNum       = read(fid, Int32)
+        h.crosslineNum    = read(fid, Int32)
+        h.shotNum         = read(fid, Int32)
+        h.scalarOnShotNum = read(fid, Int16)
+        h.tvmu            = read(fid, Int16)
+        skip(fid, 10) # skip 10 bytes
+        h.didf            = read(fid, Int16)
+        h.scalart         = read(fid, Int16)
+        h.stype           = read(fid, Int16)
+        skip(fid, 20) # skip 20 bytes to the begining of trace data
+
+        if swap_bytes
+           for field in fieldnames(TraceHeader)
+               setfield!(h, field, bswap(getfield(h, field)))
+           end
+        end
+        trace_header[i] = h
+
+        if data_format == "IEEE"
+           tmp = read(fid, Float32, num_samples)
+		    elseif data_format == "IBM"
+	 		     tmp = read(fid, IBMFloat32, num_samples)
+	 		     tmp = convert(Vector{Float32}, tmp)
+		    end
+        data[:,i] = tmp
+    end
+
+    close(fid)
+    return text_header, file_header, trace_header, data
 
 end
 

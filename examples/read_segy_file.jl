@@ -26,7 +26,7 @@ path_sgy = joinpath(work_dir, "shot_gather.sgy");
 # norm(thdr4 - thdr)
 #
 # read the text file header
-thdr = print_text_header(path_sgy);
+thdr = read_text_header(path_sgy);
 #
 # # test write a segy file
 path_tmp = joinpath(work_dir, "tmp.sgy");
@@ -41,17 +41,19 @@ fhdr = read_file_header(path_sgy);
 # test write the file header
 put_file_header(path_tmp, fhdr);
 
+# read all the trace header in one segy file
+traces_header = read_all_traces_header(path_sgy);
 
-fhdr1 = read_file_header(path_tmp);
-b = diff_file_header(fhdr, fhdr1);
-
-fhdr2 = FileHeader(fhdr);
-# test they are equal to each other
-function diff_file_header(fhdr1, fhdr2)
-
-    r = 0.0
-    for field in fieldnames(FileHeader)
-        r = r + abs2(getfield(fhdr1, field) - getfield(fhdr2, field))
-    end
-    return r
-end
+# fhdr1 = read_file_header(path_tmp);
+# b = diff_file_header(fhdr, fhdr1);
+#
+# fhdr2 = FileHeader(fhdr);
+# # test they are equal to each other
+# function diff_file_header(fhdr1, fhdr2)
+#
+#     r = 0.0
+#     for field in fieldnames(FileHeader)
+#         r = r + abs2(getfield(fhdr1, field) - getfield(fhdr2, field))
+#     end
+#     return r
+# end

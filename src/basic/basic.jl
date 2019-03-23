@@ -1,6 +1,7 @@
 # ============read and write segy file ====================
 export convert,
        show,
+       read_text_header,
        print_text_header,
        put_text_header,
        FileHeader,
