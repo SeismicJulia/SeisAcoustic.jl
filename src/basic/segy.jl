@@ -781,7 +781,7 @@ end
 """
    read the header of whole traces, return vector of TraceHeader
 """
-function read_all_traces_header(path::String; swap_bytes=true)
+function read_all_traces_header(path::String; swap_bytes=true; print_interval=10000)
 
 		file_header = read_file_header(path; swap_bytes=swap_bytes)
 		println("===================================================================\n")
@@ -900,6 +900,10 @@ function read_all_traces_header(path::String; swap_bytes=true)
            end
         end
         vector_trace_header[i] = h
+
+        if (i % print_interval) == 0
+           println("trace: $i")
+        end
 	  end
 
     close(fid)
