@@ -941,22 +941,29 @@ function read_segy_file(path::String; swap_bytes=true, data_format="NULL")
     if data_format == "NULL"
        if file_header.fmtc == 1
           data_format = "IBM"
+          tmp_trace   = Vector{IBMFloat32}(undef, num_samples)
           @printf("data format determined from file header                  : IBM\n")
        elseif file_header.fmtc == 5
           data_format = "IEEE"
           @printf("data format determined from file header                  : IEEE\n")
+          tmp_trace   = Vector{Float32}(undef, num_samples)
        end
     else
        @printf("data format determined from keyword input                : %s\n", data_format)
     end
 
+    # the start location of the first trace
     fid = open(path, "r")
     seek(fid, file_hsize)
 
+    # allocate space for trace header and data
     trace_header = Vector{TraceHeader}(undef, num_traces)
-    data = zeros(Float32, num_samples, num_traces)
+    data         = zeros(Float32, num_samples, num_traces)
+    idx          = 1
+
     for i = 1 : num_traces
 
+        # read each item of trace header
         h = init_TraceHeader()
         h.tracl  = read(fid, Int32)
         h.tracr  = read(fid, Int32)
@@ -1049,13 +1056,14 @@ function read_segy_file(path::String; swap_bytes=true, data_format="NULL")
         end
         trace_header[i] = h
 
+        # read trace data
+        read!(fid, tmp_trace)
         if data_format == "IEEE"
-           tmp = read(fid, Float32, num_samples)
+           copyto!(data, idx, tmp_trace, 1, num_samples)
 		    elseif data_format == "IBM"
-	 		     tmp = read(fid, IBMFloat32, num_samples)
-	 		     tmp = convert(Vector{Float32}, tmp)
+           copyto!(data, idx, convert(Vector{Float32}, tmp_trace), 1, num_samples)
 		    end
-        data[:,i] = tmp
+        idx = idx + num_samples
     end
 
     close(fid)
@@ -1063,6 +1071,10 @@ function read_segy_file(path::String; swap_bytes=true, data_format="NULL")
 
 end
 
+# write a segy file, need to be coded
+
+
+# fixed until this step
 """
    only work when the data are sorted in shot gathers
 """
@@ -1366,6 +1378,7 @@ function read_one_shot(path_sgy::String, path_txt::String, idx::Integer)
     # read the shot gather
     trace_header = Vector{TraceHeader}(num_receivers)
     data         = zeros(Float32, num_samples, num_receivers)
+    idx          = 1
     for i = 1 : num_receivers
         h = init_TraceHeader()
         h.tracl  = read(fid, Int32)
@@ -1459,13 +1472,16 @@ function read_one_shot(path_sgy::String, path_txt::String, idx::Integer)
         end
         trace_header[i] = h
 
+        # read seismic data
         if data_format == "IEEE"
            tmp = read(fid, Float32, num_samples)
+           copyto!(data, idx, tmp, 1, file_header.ns)
   		  elseif data_format == "IBM"
   	 		   tmp = read(fid, IBMFloat32, num_samples)
-  	 		   tmp = convert(Vector{Float32}, tmp)
+           copyto!(data, idx, convert(Vector{Float32}, tmp), 1, file_header.ns)
   		  end
-        data[:,i] = tmp
+        idx = idx + num_samples
+
     end
 
     return trace_header, data

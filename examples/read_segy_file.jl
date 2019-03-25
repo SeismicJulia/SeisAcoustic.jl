@@ -44,6 +44,22 @@ put_file_header(path_tmp, fhdr);
 # read all the trace header in one segy file
 traces_header = read_all_traces_header(path_sgy);
 
+# read one segy file
+(th, fh, thdr, data) = read_segy_file(path_sgy);
+imshow(data[:,1:1000], vmax=1000, vmin=-1000, cmap="seismic")
+
+
+# test one trace of the data from a file
+data = zeros(file_header.ns, 3)
+
+tmp = Vector{IBMFloat32}(undef, file_header.ns)
+location = 3600 + 240
+fp  = open(path_sgy, "r")
+seek(fp, location)
+
+read!(fp, tmp)
+
+
 # fhdr1 = read_file_header(path_tmp);
 # b = diff_file_header(fhdr, fhdr1);
 #
