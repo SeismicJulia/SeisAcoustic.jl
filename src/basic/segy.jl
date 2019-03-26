@@ -409,7 +409,7 @@ end
 function put_file_header(path::String, fhdr::FileHeader; swap_bytes=true)
 
     # the start point for file header
-    stream = open(path, "w+")
+    stream = open(path, "a+")
     seek(stream, file_header_location[:jobid])
 
     # initialize a temporary file header
@@ -1129,6 +1129,166 @@ function read_segy_file(path::String; swap_bytes=true, data_format="NULL")
     close(fid)
     return text_header, file_header, trace_header, data
 
+end
+
+"""
+   write segy file with inputed text header, file header, vector of trace header and data,
+only support save the data in IEEE format (different to the default IBM format).
+"""
+function write_segy_file(path::String, text_header::Vector{Char}, fhdr::FileHeader,
+         thdr::Union{Vector{TraceHeader}, TraceHeader}, data; swap_bytes=true, data_format="IEEE")
+
+    # write text header
+    put_text_header(path, text_header)
+
+    # check number of samples per trace
+    num_samples = size(data, 1)
+    if num_samples != fhdr.ns
+       fhdr.ns = num_samples
+    end
+
+    # write file header
+    fhdr.fmtc = 5  # make sure the data format is IEEE
+    put_file_header(path, fhdr)
+
+    # convert data to Float32
+    if eltype(data) != Float32
+       data = convert(Array{Float32}, data)
+    end
+
+    # the start location trace header
+    file_hsize = 3600
+    fp = open(path, "w+")
+    seek(fp, file_hsize)
+
+    # write only 1 trace
+    if typeof(thdr) == TraceHeader
+       if prod(size(data)[2:end]) != 1
+          error("input more than one trace")
+       end
+       write_one_trace(fp, thdr, data)
+
+    # write multiple traces
+   elseif typeof(thdr) == Vector{TraceHeader}
+       num_traces = length(thdr)
+       if num_traces != prod(size(data)[2:end])
+          error("number of trace header not equal to the number of data trace")
+       end
+       data  = reshape(data, num_samples, num_traces)
+       for i = 1 : num_traces
+           write_one_trace(fp, thdr[i], data[:,i])
+       end
+
+    # wronge input
+    else
+       error("input trace header is wrong")
+    end
+
+    close(fp)
+
+    return nothing
+end
+
+"""
+   write one trace header and data to segy file
+"""
+function write_one_trace(fid::IOStream, h::TraceHeader, d::Vector{Float32})
+
+    #write the field of one trace header with swaped byte
+    write(fid, bswap(h.tracl          ))
+    write(fid, bswap(h.tracr          ))
+    write(fid, bswap(h.fldr           ))
+    write(fid, bswap(h.tracf          ))
+    write(fid, bswap(h.ep             ))
+    write(fid, bswap(h.cdp            ))
+    write(fid, bswap(h.cdpt           ))
+    write(fid, bswap(h.trid           ))
+    write(fid, bswap(h.nva            ))
+    write(fid, bswap(h.nhs            ))
+    write(fid, bswap(h.duse           ))
+    write(fid, bswap(h.offset         ))
+    write(fid, bswap(h.gelev          ))
+    write(fid, bswap(h.selev          ))
+    write(fid, bswap(h.sdepth         ))
+    write(fid, bswap(h.gdel           ))
+    write(fid, bswap(h.sdel           ))
+    write(fid, bswap(h.swdep          ))
+    write(fid, bswap(h.gwdep          ))
+    write(fid, bswap(h.scalel         ))
+    write(fid, bswap(h.scalco         ))
+    write(fid, bswap(h.sx             ))
+    write(fid, bswap(h.sy             ))
+    write(fid, bswap(h.gx             ))
+    write(fid, bswap(h.gy             ))
+    write(fid, bswap(h.counit         ))
+    write(fid, bswap(h.wevel          ))
+    write(fid, bswap(h.swevel         ))
+    write(fid, bswap(h.sut            ))
+    write(fid, bswap(h.gut            ))
+    write(fid, bswap(h.sstat          ))
+    write(fid, bswap(h.gstat          ))
+    write(fid, bswap(h.tstat          ))
+    write(fid, bswap(h.laga           ))
+    write(fid, bswap(h.lagb           ))
+    write(fid, bswap(h.delrt          ))
+    write(fid, bswap(h.muts           ))
+    write(fid, bswap(h.mute           ))
+    write(fid, bswap(h.ns             ))
+    write(fid, bswap(h.dt             ))
+    write(fid, bswap(h.gain           ))
+    write(fid, bswap(h.igc            ))
+    write(fid, bswap(h.igi            ))
+    write(fid, bswap(h.corr           ))
+    write(fid, bswap(h.sfs            ))
+    write(fid, bswap(h.sfe            ))
+    write(fid, bswap(h.slen           ))
+    write(fid, bswap(h.styp           ))
+    write(fid, bswap(h.stas           ))
+    write(fid, bswap(h.stae           ))
+    write(fid, bswap(h.tatyp          ))
+    write(fid, bswap(h.afilf          ))
+    write(fid, bswap(h.afils          ))
+    write(fid, bswap(h.nofilf         ))
+    write(fid, bswap(h.nofils         ))
+    write(fid, bswap(h.lcf            ))
+    write(fid, bswap(h.hcf            ))
+    write(fid, bswap(h.lcs            ))
+    write(fid, bswap(h.hcs            ))
+    write(fid, bswap(h.year           ))
+    write(fid, bswap(h.day            ))
+    write(fid, bswap(h.hour           ))
+    write(fid, bswap(h.minute         ))
+    write(fid, bswap(h.sec            ))
+    write(fid, bswap(h.timbas         ))
+    write(fid, bswap(h.trwf           ))
+    write(fid, bswap(h.grnors         ))
+    write(fid, bswap(h.grnofr         ))
+    write(fid, bswap(h.grnlof         ))
+    write(fid, bswap(h.gaps           ))
+    write(fid, bswap(h.otrav          ))
+    write(fid, bswap(h.CDPx           ))
+    write(fid, bswap(h.CDPy           ))
+    write(fid, bswap(h.inlineNum      ))
+    write(fid, bswap(h.crosslineNum   ))
+    write(fid, bswap(h.shotNum        ))
+    write(fid, bswap(h.scalarOnShotNum))
+    write(fid, bswap(h.tvmu           ))
+
+    # write 5 Int16(0) to fill the 10 byte gap
+    write(fid, zeros(Int16, 5))
+
+    # write another 3 fields
+    write(fid, bswap(h.didf           ))
+    write(fid, bswap(h.scalart        ))
+    write(fid, bswap(h.stype          ))
+
+    # write 5 Int32(0) to fill the 20 byte gap
+    write(fid, zeros(Int32, 5))
+
+    # flush the IOBuffer
+    flush(fid)
+
+    return nothing
 end
 
 """
