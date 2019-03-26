@@ -9,7 +9,7 @@ text_header = read_text_header(path_sgy);
 print_text_header(text_header)
 
 # read file header
-fhdr = read_file_header(path_sgy);
+file_header = read_file_header(path_sgy);
 
 # total number of traces
 tmp = filesize(path_sgy);

@@ -1158,7 +1158,7 @@ function write_segy_file(path::String, text_header::Vector{Char}, fhdr::FileHead
 
     # the start location trace header
     file_hsize = 3600
-    fp = open(path, "w+")
+    fp = open(path, "a+")
     seek(fp, file_hsize)
 
     # write only 1 trace
