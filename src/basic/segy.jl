@@ -1275,7 +1275,7 @@ function write_one_trace(fid::IOStream, h::TraceHeader, d::Vector{Float32})
     write(fid, bswap(h.tvmu           ))
 
     # write 5 Int16(0) to fill the 10 byte gap
-    write(fid, zeros(Int16, 5))
+    write(fid, zeros(Int8, 10))
 
     # write another 3 fields
     write(fid, bswap(h.didf           ))
@@ -1283,7 +1283,10 @@ function write_one_trace(fid::IOStream, h::TraceHeader, d::Vector{Float32})
     write(fid, bswap(h.stype          ))
 
     # write 5 Int32(0) to fill the 20 byte gap
-    write(fid, zeros(Int32, 5))
+    write(fid, zeros(Int8, 20))
+
+    # write the seismic data
+    write(fid, d)
 
     # flush the IOBuffer
     flush(fid)

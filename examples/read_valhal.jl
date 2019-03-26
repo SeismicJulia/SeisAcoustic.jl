@@ -43,7 +43,7 @@ idx = 946;
 
 # test write segy file
 path_out = joinpath(work_dir, "test.segy")
-write_segy_file(path_out, text_header, fhdr, th1, data1);
+write_segy_file(path_out, text_header, file_header, th1, data1);
 
 (text3, fh3, th3, data3) = read_segy_file(path_out);
 
