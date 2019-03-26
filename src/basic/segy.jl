@@ -639,6 +639,50 @@ mutable struct TraceHeader
 		stype           :: Int16
 end
 
+"""
+   write trace's header into binary file
+"""
+function write_traces_header(path_hdr::String, thdr::Vector{TraceHeader})
+
+     # open file for writting
+     fp = open(path_hdr, "w")
+
+     # total number of traces
+     num = length(thdr)
+     write(fp, num)
+
+     # loop over traces
+     for i = 1 : num
+         for field in fieldnames(TraceHeader)
+             write(fp, getfield(thdr[i], field))
+         end
+     end
+     close(fp)
+end
+
+"""
+   read traces header from binary file
+"""
+function read_traces_header(path_hdr::String)
+
+    fp = open(path_hdr, "r")
+
+    # total number of traces
+    num = read(fp, Int64)
+
+    # allocate memory
+    thdr = Vector{TraceHeader}(undef, num)
+    for i = 1 : num
+        h = init_TraceHeader()
+        for field in fieldnames(TraceHeader)
+            setfield(h, read(fp, typeof(getfield(h, field))))
+        end
+        thdr[i] = h
+    end
+
+    return thdr
+end
+
 const trace_header_location = Dict(
     :tracl  => 0,
     :tracr  => 4,
@@ -781,7 +825,7 @@ end
 """
    read the header of whole traces, return vector of TraceHeader
 """
-function read_all_traces_header(path::String; swap_bytes=true, print_interval=10000)
+function extract_traces_header(path::String; swap_bytes=true, print_interval=10000)
 
 		file_header = read_file_header(path; swap_bytes=swap_bytes)
 		println("===================================================================\n")

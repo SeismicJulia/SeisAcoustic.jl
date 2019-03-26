@@ -16,7 +16,7 @@ tmp = filesize(path_sgy);
 num_traces = convert(Int64, (tmp - 3600) / (240+sizeof(Float32)*fhdr.ns))
 
 # read all the trace header
-traces_header = read_all_traces_header(path_sgy; print_interval=1000);
+traces_header = extract_traces_header(path_sgy; print_interval=1000);
 for i = 1 : 500
     sx = traces_header[i].sx
     sy = traces_header[i].sy

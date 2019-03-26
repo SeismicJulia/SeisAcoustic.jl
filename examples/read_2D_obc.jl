@@ -17,7 +17,7 @@ num_traces = convert(Int64, (tmp - 3600) / (240+sizeof(Float32)*fhdr.ns))
 
 
 
-traces_header = read_all_traces_header(path_sgy; print_interval=100000);
+traces_header = extract_traces_header(path_sgy; print_interval=100000);
 
 i = 1000
 (shot_x, shot_y) = extract_shot_gather(sx[i], sy[i], traces_header);
@@ -46,7 +46,7 @@ function extract_shot_gather(sx::T, sy::T, traces_header::Vector{TraceHeader}; p
 end
 
 # read all the trace header
-traces_header = read_all_traces_header(path_sgy; print_interval=100000);
+traces_header = extract_traces_header(path_sgy; print_interval=100000);
 for i = 1 : 100
     x = traces_header[i].inlineNum
     y = traces_header[i].crosslineNum
