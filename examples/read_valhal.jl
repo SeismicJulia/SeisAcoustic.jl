@@ -1,7 +1,7 @@
-using SeisAcoustic
+using SeisAcoustic, PyPlot
 
 # the path to segy file
-work_dir = "/home/wgao1/BP_valhall";
+work_dir = "/home/wgao1/BP_valhall/line2";
 path_sgy = joinpath(work_dir, "obc.sgy");
 
 # read text file header
@@ -34,19 +34,17 @@ write_traces_header(path_thdr, traces_header);
 # read_traces_header
 thdr = read_traces_header(path_thdr);
 
+# creat acquisition geometry from shot gather
+(sx, sy, gx, gy) = create_acquisition_geometry(thdr; num_component=4);
+i = 1; figure(figsize(8,8));
+scatter(gx[i], gy[i], s=1 , c="g");
+scatter(sx[i], sy[i], s=40, c="r");
 
-
-
-(sx, sy, gx, gy) = create_acquisition_geometry(traces_header);
-
+# create quick lookup table
 path_tab = joinpath(work_dir, "lookup_table.txt");
 create_lookup_table(path_tab, path_sgy);
 
-work_dir = "/Users/wenlei/Desktop/OBC_2D";
-path_sgy = joinpath(work_dir, "hydro.segy");
-path_tab = joinpath(work_dir, "lookup_table.txt");
-(fh_size, ns, ntrace, swap_bytes, data_format, shot_idx) = read_lookup_table(path_tab);
-
-i = 16
-(trace_header, d) = read_one_shot(path_sgy, path_tab, i);
+# read one shot gather from segy file
+idx = 1;
+(th, data) = read_one_shot(path_sgy, path_tab, idx);
 figure(); imshow(d, vmax=10, vmin=-10, cmap="seismic", aspect=0.2);

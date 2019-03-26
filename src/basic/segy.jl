@@ -1219,7 +1219,7 @@ function create_acquisition_geometry(traces_header::Vector{TraceHeader}; num_com
     num_traces_per_shot = zeros(Int64, num_shots)
     for i = 1 : num_shots
         tmp = trace_end[i] - trace_start[i] + 1
-        num_traces_per_shot[i] = convert(Int64, tmp / 4)
+        num_traces_per_shot[i] = convert(Int64, tmp / num_component)
     end
 
     # get the source coordinate
