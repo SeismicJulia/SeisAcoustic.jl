@@ -120,7 +120,7 @@ const field_location = Dict(
 );
 
 """
-   constructor for the header of uniform sampled data
+   constructor for the header of regularly sampled data
 """
 function RegularSampleHeader(;n1=0, n2=1, n3=1, n4=1, n5=1, n6=1, n7=1, n8=1, n9=1,
          o1=0., o2=0., o3=0., o4=0., o5=0., o6=0., o7=0., o8=0., o9=0.,
@@ -141,7 +141,7 @@ function RegularSampleHeader(;n1=0, n2=1, n3=1, n4=1, n5=1, n6=1, n7=1, n8=1, n9
 end
 
 """
-   constructor for the header of uniform sampled data
+   constructor for the header of regularly sampled data
 """
 function RegularSampleHeader(d::Array{Tv}; n1=0, n2=1, n3=1, n4=1, n5=1, n6=1, n7=1, n8=1, n9=1,
          o1=0., o2=0., o3=0., o4=0., o5=0., o6=0., o7=0., o8=0., o9=0.,
@@ -186,6 +186,9 @@ function RegularSampleHeader(d::Array{Tv}; n1=0, n2=1, n3=1, n4=1, n5=1, n6=1, n
 
 end
 
+"""
+   overloading the show function for the header of regularly sampled data
+"""
 function show(io::IO, hdr::RegularSampleHeader)
 
     @printf("n1= %6d, o1=%6.2f, d1=%6.2f, label1=%10s, unit1=%10s\n", hdr.n1, hdr.o1, hdr.d1, hdr.label1, hdr.unit1)
@@ -203,6 +206,9 @@ function show(io::IO, hdr::RegularSampleHeader)
 
 end
 
+"""
+   write regularly sampled data to binary file
+"""
 function write_RSdata(path::String, hdr::RegularSampleHeader)
 
     #for each field, Int64, Float64,
@@ -288,9 +294,9 @@ function write_RSdata(path::String, hdr::RegularSampleHeader, d::Array{Tv}) wher
        write(fid, UInt8(1))
     elseif hdr.data_format == Float64
        write(fid, UInt8(2))
-    elseif hdr.data_format == Complex64
+    elseif hdr.data_format == Complex{Float32}
        write(fid, UInt8(3))
-    elseif hdr.data_format == Complex128
+    elseif hdr.data_format == Complex{Float64}
        write(fid, UInt8(4))
     elseif hdr.data_format == Int32
        write(fid, UInt8(5))
@@ -313,6 +319,7 @@ function read_RSdata(path::String; data_flag=true)
 
     fid = open(path, "r")
 
+    # the size of each dimension
     n1  = read(fid, Int64)
     n2  = read(fid, Int64)
     n3  = read(fid, Int64)
@@ -323,6 +330,7 @@ function read_RSdata(path::String; data_flag=true)
     n8  = read(fid, Int64)
     n9  = read(fid, Int64)
 
+    # start index
     o1  = read(fid, Float64)
     o2  = read(fid, Float64)
     o3  = read(fid, Float64)
@@ -333,6 +341,7 @@ function read_RSdata(path::String; data_flag=true)
     o8  = read(fid, Float64)
     o9  = read(fid, Float64)
 
+    # interval aling each dimension
     d1  = read(fid, Float64)
     d2  = read(fid, Float64)
     d3  = read(fid, Float64)
@@ -345,7 +354,7 @@ function read_RSdata(path::String; data_flag=true)
 
     # read 11 string
     indicator = convert(UInt8, '\n')
-    str = Vector{String}(19)
+    str = Vector{String}(undef, 19)
     a = read(fid, UInt8, 80 * 19)
     a = reshape(a, 80, 19)
     for i = 1 : 19
@@ -364,9 +373,9 @@ function read_RSdata(path::String; data_flag=true)
     elseif indicator == 2
        data_format = Float64
     elseif indicator == 3
-       data_format = Complex64
+       data_format = Complex{Float32}
     elseif indicator == 4
-       data_format = Complex128
+       data_format = Complex{Float64}
     elseif indicator == 5
        data_format = Int32
     elseif indicator == 6
@@ -382,29 +391,29 @@ function read_RSdata(path::String; data_flag=true)
                                str[19], data_format)
 
     N = n1 * n2 * n3 * n4 * n5 * n6 * n7 * n8 * n9
-
+    data = Vector{data_format}(undef, N)
     # read data
     if data_flag
-       d1 = read(fid, data_format, N)
+       read!(fid, data)
        if n9 != 1
-          d1 = reshape(d1, n1, n2, n3, n4, n5, n6, n7, n8, n9)
+          data = reshape(data, n1, n2, n3, n4, n5, n6, n7, n8, n9)
        elseif n8 != 1
-          d1 = reshape(d1, n1, n2, n3, n4, n5, n6, n7, n8)
+          data = reshape(data, n1, n2, n3, n4, n5, n6, n7, n8)
        elseif n7 != 1
-          d1 = reshape(d1, n1, n2, n3, n4, n5, n6, n7)
+          data = reshape(data, n1, n2, n3, n4, n5, n6, n7)
        elseif n6 != 1
-          d1 = reshape(d1, n1, n2, n3, n4, n5, n6)
+          data = reshape(data, n1, n2, n3, n4, n5, n6)
        elseif n5 != 1
-          d1 = reshape(d1, n1, n2, n3, n4, n5)
+          data = reshape(data, n1, n2, n3, n4, n5)
        elseif n4 != 1
-          d1 = reshape(d1, n1, n2, n3, n4)
+          data = reshape(data, n1, n2, n3, n4)
        elseif n3 != 1
-          d1 = reshape(d1, n1, n2, n3)
+          data = reshape(data, n1, n2, n3)
        elseif n2 != 1
-          d1 = reshape(d1, n1, n2)
+          data = reshape(data, n1, n2)
        end
        close(fid)
-       return hdr, d1
+       return hdr, data
     else
        close(fid)
        return hdr

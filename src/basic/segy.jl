@@ -1075,10 +1075,70 @@ function read_segy_file(path::String; swap_bytes=true, data_format="NULL")
 
 end
 
-# write a segy file, need to be coded
+"""
+   extract unique locations of sources or receivers
+"""
+function extract_sensors_location(thdr::Vector{TraceHeader}; tol = 1.0, print_interval=10000)
 
+    num_traces = length(thdr)
 
-# fixed until this step
+    # the vector to save unique source location
+    sx = [thdr[1].sx]
+    sy = [thdr[1].sy]
+
+    # the vector to save unique receiver location
+    gx = [thdr[1].gx]
+    gy = [thdr[1].gy]
+
+    # the vector to save number of traces per shot
+    num_receiver = Vector{Int64}(undef, 0)
+
+    # temporary variable for sensors' location difference
+    res = zeros(Float32, 2)
+
+    # the distance between sensors
+    dis = Inf32
+
+    for i = 2 : num_traces
+
+        # source location
+        dis = Inf32
+        for j = 1 : length(sx)
+            res[1] = sx[j] - thdr[i].sx
+            res[2] = sy[j] - thdr[i].sy
+            tmp = norm(res)
+            if tmp < dis
+               dis = tmp
+            end
+        end
+        if dis > tol
+           push!(sx, thdr[i].sx)
+           push!(sy, thdr[i].sy)
+        end
+
+        # receiver location
+        dis = Inf
+        for j = 1 : length(gx)
+            res[1] = gx[j] - thdr[i].gx
+            res[2] = gy[j] - thdr[i].gy
+            tmp = norm(res)
+            if tmp < dis
+               dis = tmp
+            end
+        end
+        if dis > tol
+           push!(gx, thdr[i].gx)
+           push!(gy, thdr[i].gy)
+        end
+
+        if (i % print_interval) == 0
+           println("trace number: $i")
+        end
+    end
+
+    return sx, sy, gx, gy
+end
+
 """
    only work when the data are sorted in shot gathers
 """
@@ -1086,9 +1146,9 @@ function create_acquisition_geometry(traces_header::Vector{TraceHeader})
 
     num_traces = length(traces_header)
 
-    # determine the start and end trace for each shot
+    # determine the start and end trace index for each shot
     trace_start = [1]
-    trace_end   = [ ]
+    trace_end   = Vector{Int64}(undef, 0)
     for i  = 2 : num_traces
         if traces_header[i].sx != traces_header[i-1].sx || traces_header[i].sy != traces_header[i-1].sy
            push!(trace_end, i-1)
@@ -1104,17 +1164,22 @@ function create_acquisition_geometry(traces_header::Vector{TraceHeader})
         num_traces_per_shot[i] = trace_end[i] - trace_start[i] + 1
     end
 
-    # get the source field_location
-    source_x = zeros(Float32, num_shots)
-    source_y = zeros(Float32, num_shots)
-    receiver_x = Vector{Vector{Float32}}(num_shots)
-    receiver_y = Vector{Vector{Float32}}(num_shots)
+    # get the source coordinate
+    data_format = typeof(traces_header[1].sx)
+    source_x = zeros(data_format, num_shots)
+    source_y = zeros(data_format, num_shots)
+
+    # get the receiver coordinate for each shot
+    data_format = typeof(traces_header[1].gx)
+    receiver_x = Vector{Vector{data_format}}(undef, num_shots)
+    receiver_y = Vector{Vector{data_format}}(undef, num_shots)
+
     for i = 1 : num_shots
         idx = trace_start[i]
         source_x[i] = traces_header[idx].sx
         source_y[i] = traces_header[idx].sy
-        tmp_x = zeros(Float32, num_traces_per_shot[i])
-        tmp_y = zeros(Float32, num_traces_per_shot[i])
+        tmp_x = zeros(data_format, num_traces_per_shot[i])
+        tmp_y = zeros(data_format, num_traces_per_shot[i])
         count = 0
         for j = trace_start[i] : trace_end[i]
             count = count + 1
@@ -1133,11 +1198,6 @@ end
    create a lookup table to facilitate the reading of gathers(can be shot gather or CMP gathers)
 """
 function create_lookup_table(path_txt::String, path::String; swap_bytes=true, data_format="NULL")
-
-    # print file text header
-    println("===================================================================\n")
-    println("=======================Print text header===========================\n")
-    text_header = print_text_header(path)
 
     # print file header
     file_header = read_file_header(path; swap_bytes=swap_bytes)
@@ -1180,7 +1240,7 @@ function create_lookup_table(path_txt::String, path::String; swap_bytes=true, da
     seek(fid, file_hsize)
 
     # read the header of all traces
-    trace_header = Vector{TraceHeader}(num_traces)
+    trace_header = Vector{TraceHeader}(undef, num_traces)
     for i = 1 : num_traces
         h = init_TraceHeader()
         h.tracl  = read(fid, Int32)
@@ -1270,7 +1330,7 @@ function create_lookup_table(path_txt::String, path::String; swap_bytes=true, da
 
         # swap byte
         if swap_bytes
-           for field in fieldnames(h)
+           for field in fieldnames(TraceHeader)
                setfield!(h, field, bswap(getfield(h, field)))
            end
         end
@@ -1310,7 +1370,6 @@ function create_lookup_table(path_txt::String, path::String; swap_bytes=true, da
     close(fid)
 end
 
-
 """
    read the lookup table for shot gathers
    example: (file_header_size, num_samples, num_traces, swap_bytes, data_format, shot_idx) = read_lookup_table(path);
@@ -1320,28 +1379,28 @@ function read_lookup_table(path::String)
     fid = open(path, "r")
 
     # read the file_header_size
-    tmp = readline(fid); loc = rsearchindex(tmp, " = ");
-    file_header_size = parse(Int32, tmp[loc+3:end])
+    tmp = readline(fid); loc = findfirst(isequal('='), tmp);
+    file_header_size = parse(Int32, tmp[loc+2:end])
 
     # read the number of samples per trace
-    tmp = readline(fid); loc = rsearchindex(tmp, " = ");
-    num_samples = parse(Int32, tmp[loc+3:end])
+    tmp = readline(fid); loc = findfirst(isequal('='), tmp);
+    num_samples = parse(Int32, tmp[loc+2:end])
 
     # read the number of traces
-    tmp = readline(fid); loc = rsearchindex(tmp, " = ");
-    num_traces = parse(Int32, tmp[loc+3:end])
+    tmp = readline(fid); loc = findfirst(isequal('='), tmp);
+    num_traces = parse(Int32, tmp[loc+2:end])
 
     # read the number of shots
-    tmp = readline(fid); loc = rsearchindex(tmp, " = ");
-    num_shots = parse(Int32, tmp[loc+3:end])
+    tmp = readline(fid); loc = findfirst(isequal('='), tmp);
+    num_shots = parse(Int32, tmp[loc+2:end])
 
     # read the flag of byte swap
-    tmp = readline(fid); loc = rsearchindex(tmp, " = ");
-    swap_bytes = parse(Bool, tmp[loc+3:end])
+    tmp = readline(fid); loc = findfirst(isequal('='), tmp);
+    swap_bytes = parse(Bool, tmp[loc+2:end])
 
     # read the data format of the data sampale
-    tmp = readline(fid); loc = rsearchindex(tmp, " = ");
-    data_format = tmp[loc+3:end]
+    tmp = readline(fid); loc = findfirst(isequal('='), tmp);
+    data_format = tmp[loc+2:end]
 
     # close the file
     close(fid)
@@ -1374,13 +1433,20 @@ function read_one_shot(path_sgy::String, path_txt::String, idx::Integer)
     trace_end     = shot_idx[idx, 3]
     num_receivers = trace_end - trace_start + 1
 
+    # all memory to save data of one trace
+    if data_format == "IBM"
+       tmp_trace = Vector{IBMFloat32}(undef, num_samples)
+    elseif data_format == "IEEE"
+       tmp_trace = Vector{Float32}(undef, num_samples)
+    end
+
     # the start position
     location = file_header_size + (trace_start-1) * trace_size
     fid = open(path_sgy, "r")
     seek(fid, location)
 
     # read the shot gather
-    trace_header = Vector{TraceHeader}(num_receivers)
+    trace_header = Vector{TraceHeader}(undef, num_receivers)
     data         = zeros(Float32, num_samples, num_receivers)
     idx          = 1
     for i = 1 : num_receivers
@@ -1470,19 +1536,18 @@ function read_one_shot(path_sgy::String, path_txt::String, idx::Integer)
         skip(fid, 20) # skip 20 bytes to the begining of trace data
 
         if swap_bytes
-           for field in fieldnames(h)
+           for field in fieldnames(TraceHeader)
                setfield!(h, field, bswap(getfield(h, field)))
            end
         end
         trace_header[i] = h
 
         # read seismic data
+        read!(fid, tmp_trace)
         if data_format == "IEEE"
-           tmp = read(fid, Float32, num_samples)
-           copyto!(data, idx, tmp, 1, file_header.ns)
+           copyto!(data, idx, tmp_trace, 1, num_samples)
   		  elseif data_format == "IBM"
-  	 		   tmp = read(fid, IBMFloat32, num_samples)
-           copyto!(data, idx, convert(Vector{Float32}, tmp), 1, file_header.ns)
+           copyto!(data, idx, convert(Vector{Float32}, tmp_trace), 1, num_samples)
   		  end
         idx = idx + num_samples
 
@@ -1490,23 +1555,3 @@ function read_one_shot(path_sgy::String, path_txt::String, idx::Integer)
 
     return trace_header, data
 end
-
-
-# i = 50;
-# shot = data[:, trace_start[i]:trace_end[i]]
-# SeisPlot(shot, pclip=90);
-#
-# path = "/Users/wenlei/Desktop/for_Wenlei/data_Cynthia.sgy"
-# (file_header, trace_header, data) = read_segy_file(path);
-# (f, a) = amplitude_spectra(d[:,300], 0.004, 2048; fhigh_end=100);
-#
-# path = "/Users/wenlei/Desktop/for_Wenlei/source_wavelet.sgy"
-# (file_header1, trace_header1, wavelet) = read_segy_file(path);
-#
-# path = "/Users/wenlei/Desktop/for_Wenlei/velocity.sgy"
-# (file_header2, trace_header2, velocity) = read_segy_file(path);
-#
-# SeisPlot(wavelet, pclip=99);
-# SeisPlot(velocity, vmin=minimum(velocity), vmax=maximum(velocity), cmap="rainbow", wbox=10, hbox=4); colorbar();
-#
-# (trace_start, trace_end, source_x, source_y, receiver_x, receiver_y) = create_acquisition_geometry(trace_header)
