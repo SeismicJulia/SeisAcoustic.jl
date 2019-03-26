@@ -642,7 +642,7 @@ end
 """
    write trace's header into binary file
 """
-function write_traces_header(path_hdr::String, thdr::Vector{TraceHeader})
+function write_traces_header(path_hdr::String, thdr::Vector{TraceHeader}; print_interval=10000)
 
      # open file for writting
      fp = open(path_hdr, "w")
@@ -656,6 +656,10 @@ function write_traces_header(path_hdr::String, thdr::Vector{TraceHeader})
          for field in fieldnames(TraceHeader)
              write(fp, getfield(thdr[i], field))
          end
+
+         if (i % print_interval) == 0
+            println("$i")
+         end
      end
      close(fp)
 end
@@ -663,26 +667,34 @@ end
 """
    read traces header from binary file
 """
-function read_traces_header(path_hdr::String)
+function read_traces_header(path_hdr::String; print_interval=10000)
 
     fp = open(path_hdr, "r")
 
     # total number of traces
     num = read(fp, Int64)
+    println("total number of traces: $num")
 
     # allocate memory
     thdr = Vector{TraceHeader}(undef, num)
     for i = 1 : num
         h = init_TraceHeader()
         for field in fieldnames(TraceHeader)
-            setfield(h, read(fp, typeof(getfield(h, field))))
+            setfield!(h, field, read(fp, typeof(getfield(h, field))))
         end
         thdr[i] = h
+
+        if (i % print_interval) == 0
+           println("$i")
+        end
     end
 
     return thdr
 end
 
+"""
+   save the byte location of trace header
+"""
 const trace_header_location = Dict(
     :tracl  => 0,
     :tracr  => 4,
@@ -1184,9 +1196,10 @@ function extract_sensors_location(thdr::Vector{TraceHeader}; tol = 1.0, print_in
 end
 
 """
-   only work when the data are sorted in shot gathers
+   create acquisition geometry from trace header, currently only work for data sorted in shot gather
+num_component used for multi-component seismic data.
 """
-function create_acquisition_geometry(traces_header::Vector{TraceHeader})
+function create_acquisition_geometry(traces_header::Vector{TraceHeader}; num_component=1)
 
     num_traces = length(traces_header)
 
@@ -1205,7 +1218,8 @@ function create_acquisition_geometry(traces_header::Vector{TraceHeader})
     num_shots = length(trace_start)
     num_traces_per_shot = zeros(Int64, num_shots)
     for i = 1 : num_shots
-        num_traces_per_shot[i] = trace_end[i] - trace_start[i] + 1
+        tmp = trace_end[i] - trace_start[i] + 1
+        num_traces_per_shot[i] = convert(Int64, tmp / 4)
     end
 
     # get the source coordinate
@@ -1226,9 +1240,11 @@ function create_acquisition_geometry(traces_header::Vector{TraceHeader})
         tmp_y = zeros(data_format, num_traces_per_shot[i])
         count = 0
         for j = trace_start[i] : trace_end[i]
-            count = count + 1
-            tmp_x[count] = traces_header[j].gx
-            tmp_y[count] = traces_header[j].gy
+            if (j % num_component) == 0
+               count = count + 1
+               tmp_x[count] = traces_header[j].gx
+               tmp_y[count] = traces_header[j].gy
+            end
         end
         receiver_x[i] = tmp_x
         receiver_y[i] = tmp_y
@@ -1241,7 +1257,7 @@ end
 """
    create a lookup table to facilitate the reading of gathers(can be shot gather or CMP gathers)
 """
-function create_lookup_table(path_txt::String, path::String; swap_bytes=true, data_format="NULL")
+function create_lookup_table(path_txt::String, path::String; swap_bytes=true, data_format="NULL", print_interval=100000)
 
     # print file header
     file_header = read_file_header(path; swap_bytes=swap_bytes)
@@ -1382,6 +1398,9 @@ function create_lookup_table(path_txt::String, path::String; swap_bytes=true, da
         # include in the vector
         trace_header[i] = h
 
+        if (i % print_interval) == 0
+           println("$i")
+        end
     end
     close(fid)
 

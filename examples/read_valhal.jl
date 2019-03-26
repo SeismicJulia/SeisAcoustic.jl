@@ -17,20 +17,22 @@ num_traces = convert(Int64, (tmp - 3600) / (240+sizeof(Float32)*fhdr.ns))
 
 # read all the trace header
 traces_header = extract_traces_header(path_sgy; print_interval=10000);
-# for i = 1 : 500
-#     sx = traces_header[i].sx
-#     sy = traces_header[i].sy
-#     gx = traces_header[i].gx
-#     gy = traces_header[i].gy
-#     println("sx: $sx, sy: $sy, gx: $gx, gy:$gy")
-#     # x = traces_header[i].cdp
-#     # println("$x")
-# end
+for i = 1 : 512
+    sx = traces_header[i].sx
+    sy = traces_header[i].sy
+    gx = traces_header[i].gx
+    gy = traces_header[i].gy
+    println("sx: $sx, sy: $sy, gx: $gx, gy:$gy")
+    # x = traces_header[i].cdp
+    # println("$x")
+end
 
 # write_traces_header
+path_thdr = joinpath(work_dir, "traces_header.bin");
+write_traces_header(path_thdr, traces_header);
 
 # read_traces_header
-
+thdr = read_traces_header(path_thdr);
 
 
 
