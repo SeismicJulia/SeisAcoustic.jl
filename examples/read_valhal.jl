@@ -1,6 +1,6 @@
 using SeisAcoustic
 
-# the path to segy file
+# the path to segy file which include 3 sourec lines 4 component OBC data
 work_dir = "/home/wgao1/BP_valhall/line2";
 path_sgy = joinpath(work_dir, "shot_line2.sgy");
 
@@ -18,28 +18,21 @@ num_traces = convert(Int64, (tmp - 3600) / (240+sizeof(Float32)*fhdr.ns))
 # read all the trace header
 traces_header = extract_traces_header(path_sgy; print_interval=10000);
 
-# write_traces_header
-path_thdr = joinpath(work_dir, "traces_header.bin");
-write_traces_header(path_thdr, traces_header);
-
-# read_traces_header
-thdr = read_traces_header(path_thdr);
-
-# create quick lookup table
+# create quick lookup table for shot gathers
 path_tab = joinpath(work_dir, "lookup_table.txt");
 create_lookup_table(path_tab, path_sgy);
 
 # creat acquisition geometry from shot gather
-(sx, sy, gx, gy) = create_acquisition_geometry(thdr; num_component=4);
+(sx, sy, gx, gy) = create_acquisition_geometry(traces_header; num_component=4);
 i = 1; figure(figsize=(8,8));
 scatter(gx[i], gy[i], s=1, c="g");
 scatter(sx[i], sy[i], s=1, c="r");
 
 # read one shot gather from segy file
-idx = 317;
-(th1, data1) = read_one_shot(path_sgy, path_tab, idx);
+idx = 317; (th, shot) = read_one_shot(path_sgy, path_tab, idx);
 
 # dimensions of data cube
+dt = 0.004
 num_samples   = 2000
 num_receivers = 2414
 num_sources   = 315
@@ -47,6 +40,8 @@ num_sources   = 315
 # prepare one common source line shot 317 - 631
 idx_l=317; idx_u=631;
 (traces_header, data) = forward(path_sgy, path_tab, idx_l, idx_u, num_samples, num_receivers);
+
+# write this source line as segy file
 path_out = joinpath(work_dir, "shot_line1.segy");
 write_segy_file(path_out, text_header, file_header, traces_header, data);
 
@@ -81,6 +76,7 @@ end
 # save the clipped data
 path_out1 = joinpath(work_dir, "clip_line1.segy");
 write_segy_file(path_out1, text_header1, file_header1, traces_header1, dc1);
+
 path_out2 = joinpath(work_dir, "clip_line2.segy");
 write_segy_file(path_out2, text_header2, file_header2, traces_header2, dc2);
 
@@ -89,45 +85,143 @@ idx = 2414
 figure(); imshow(dc1[:,idx,:], cmap="gray", aspect=0.2)
 figure(); imshow(dc2[:,idx,:], cmap="gray", aspect=0.2)
 
+# begin for pseudo-blending
 # random time shift the second shot line
-tau = 4.0 * rand(num_sources);
-path_rts = joinpath(work_dir, "random_time_shift.bin")
-fp = open(path_rts, "w")
+tau1 = 4.0 * rand(num_sources);
+# make the time delay is the integer times of time sample interval
+for i = 1 : num_sources
+    tmp = round(Int64, tau1[i]/dt)
+    tau1[i] = tmp * dt
+end
+path_rts = joinpath(work_dir, "random_time_shift1.bin")
+fp = open(path_rts, "w");
 write(fp, num_sources);
-write(fp, tau); close(fp);
+write(fp, tau1); close(fp);
 
-# apply the time shift in time domain
-ds = copy(dc1)
+# read the random time shift
+tau2 = 4.0 * rand(num_sources);
+# make the time delay is the integer times of time sample interval
+for i = 1 : num_sources
+    tmp = round(Int64, tau2[i]/dt)
+    tau2[i] = tmp * dt
+end
+path_rts = joinpath(work_dir, "random_time_shift2.bin")
+fp = open(path_rts, "w");
+write(fp, num_sources);
+write(fp, tau2); close(fp);
 
-# loop over sources
-for i = 1 : num_receivers
+# read the clipped seismic data
+path_clip1 = joinpath(work_dir, "clip_line1.segy");
+(text_header1, file_header1, traces_header1, d_clip1) = read_segy_file(path_clip1);
+d_clip1 = reshape(d_clip1, num_samples, num_receivers, num_sources);
 
-    #
-    for j = 1 : num_sources
+path_clip2 = joinpath(work_dir, "clip_line2.segy");
+(text_header2, file_header2, traces_header2, d_clip2) = read_segy_file(path_clip2);
+d_clip2 = reshape(d_clip2, num_samples, num_receivers, num_sources);
+
+# show the clipped seismic data
+idx = 50
+figure(); imshow(d_clip1[:,:,idx], cmap="gray")
+figure(); imshow(d_clip1[:,:,idx], cmap="gray")
+
+# pseudo blending, align the shots from first source line
+path_tau1 = joinpath(work_dir, "random_time_shift1.bin")
+fp = open(path, "r")
+num_tau = rand(fp, Int64)
+tau1    = zeros(Float64, num_tau)
+read!(fp, tau1); close(fp)
+d_blend1 = pseudo_blending(d_clip1, d_clip2, tau1);
+
+# pseudo blending, align the shots from second source line
+path_tau2 = joinpath(work_dir, "random_time_shift2.bin")
+fp = open(path_tau2, "r")
+num_tau = read(fp, Int64)
+tau2    = zeros(Float64, num_tau)
+read!(fp, tau2); close(fp)
+d_blend2 = pseudo_blending(d_clip2, d_clip1, tau2);
+
+# write the blended shot gathers into segy file
+path_out = joinpath(work_dir, "blend_line1.segy");
+write_segy_file(path_out, text_header1, file_header1, traces_header1, d_blend1);
+
+path_out = joinpath(work_dir, "blend_line2.segy");
+write_segy_file(path_out, text_header2, file_header2, traces_header2, d_blend2);
+
+# write the data into binary file can be accessed for training
+path_in = joinpath(work_dir, "input_train1.bin")
+fp = open(path_in, "w")
+write(fp, num_samples, num_receivers, num_sources);
+write(fp, vec(d_blend1)); close(fp);
+
+path_in = joinpath(work_dir, "output_train1.bin")
+fp = open(path_in, "w")
+write(fp, num_samples, num_receivers, num_sources);
+write(fp, vec(d_clip1)); close(fp);
+
+# for the second part of training data
+path_in = joinpath(work_dir, "input_train2.bin")
+fp = open(path_in, "w")
+write(fp, num_samples, num_receivers, num_sources);
+write(fp, vec(d_blend2)); close(fp);
+
+path_in = joinpath(work_dir, "output_train2.bin")
+fp = open(path_in, "w")
+write(fp, num_samples, num_receivers, num_sources);
+write(fp, vec(d_clip2)); close(fp);
+
+# examine the figure
+idx = 1111
+figure(); imshow(d_clip1[:,idx,:], cmap="gray", aspect=0.2)
+figure(); imshow(d_clip2[:,idx,:], cmap="gray", aspect=0.2)
+
+# show blended common receiver gathers
+idx = 100
+figure(); imshow(d_clip1[:,idx,:], cmap="gray", aspect=0.2)
+figure(); imshow(d_blend1[:,idx,:], cmap="gray", aspect=0.2)
+
+figure(); imshow(d_clip2[:,idx,:], cmap="gray", aspect=0.2)
+figure(); imshow(d_blend2[:,idx,:], cmap="gray", aspect=0.2)
+
+
+"""
+   pseudo blending function
+"""
+function pseudo_blending(d1::Array{Tv,3}, d2::Array{Tv,3}, tau) where {Tv<:AbstractFloat}
+
+    # size of data cube
+    (num_samples, num_receivers, num_sources) = size(d1)
+
+    # check the size of another cucbe
+    if num_samples != size(d2,1) || num_receivers != size(d2,2) || num_sources != size(d2,3) || length(tau) != num_sources
+       error("size mismatch")
+    end
+
+    # copy one cube
+    db = copy(d1)
+
+    # pseudo belending of two sources
+    for i = 1 : num_sources
+        istart = round(Int64, tau[i]/dt) + 1
+
+        # loop over receivers
+        for j = 1 : num_receivers
+
+            #loop over samples
+            for k = istart : num_samples
+                idx = k - istart + 1
+                db[k,j,i] = db[k,j,i] + d2[idx,j,i]
+            end
+        end
+
+        println("finished $i sources")
+    end
+
+    return db
 end
 
-
-
-idx = 1
-tmp1 = data1[:,idx,:];
-val1 = quantile(abs.(vec(tmp1)), 0.90)
-tmpc1= clamp.(tmp1, -val1, val1)
-
-tmp2 = data2[:,idx,:];
-val2 = quantile(abs.(vec(tmp2)), 0.90)
-tmpc2= clamp.(tmp2, -val2, val2)
-
-
-figure(); imshow(tmpc1, cmap="gray", aspect=0.2)
-figure(); imshow(tmpc2, cmap="gray", aspect=0.2)
-
-
-
-
-
-
-
-
+"""
+   agc based on rms amplitude
+"""
 function rms_agc(data; hwl=0.25)
 
     n = size(data, 2)
@@ -138,6 +232,9 @@ function rms_agc(data; hwl=0.25)
     return dout
 end
 
+"""
+   t-square amplitude gaining to compensate geometrical spreading
+"""
 function tsquare(d; dt=0.004)
 
     (nt, n1) = size(d)
@@ -152,10 +249,6 @@ function tsquare(d; dt=0.004)
     end
     return dout
 end
-
-
-
-
 
 """
    automatic gaining control applied to one trace, hwl is the half window length in time,
@@ -262,30 +355,6 @@ function agc(trace::Vector{Tv}; half_window_length=0.5, dt=0.004, drms=1.0, delt
 
 end
 
-gx1 = zeros(Int32, num_receivers)
-gy1 = zeros(Int32, num_receivers)
-gx2 = zeros(Int32, num_receivers)
-gy2 = zeros(Int32, num_receivers)
-for i = 1 : num_receivers
-    gx1[i] = traces_header1[i].gx
-    gy1[i] = traces_header1[i].gy
-    gx2[i] = traces_header2[i].gx
-    gy2[i] = traces_header2[i].gy
-end
-
-num_sources = 315
-sx1 = zeros(Int32, num_sources)
-sy1 = zeros(Int32, num_sources)
-sx2 = zeros(Int32, num_sources)
-sy2 = zeros(Int32, num_sources)
-for i = 1 : num_sources
-    idx = (i-1)*num_receivers + 1
-    sx1[i] = traces_header1[idx].sx
-    sy1[i] = traces_header1[idx].sy
-    sx2[i] = traces_header2[idx].sx
-    sy2[i] = traces_header2[idx].sy
-end
-
 function forward(path_sgy, path_tab, idx_l, idx_u, num_samples, num_receivers)
 
     # number of shot in this source line
@@ -352,41 +421,7 @@ function backward(path_sgy, path_tab, idx_l, idx_u, num_samples, num_receivers)
     return traces_header, data
 end
 
-
-# test write segy file: checked
-path_out = joinpath(work_dir, "test.segy")
-write_segy_file(path_out, text_header, file_header, th1, data1);
-(text3, fh3, th3, data3) = read_segy_file(path_out);
-
-
-
-
-
-
-
-# double check the traces are organized in the same other for any shot gather
-function foo(th1, th2)
-  tmp = 0.0
-  # for i = 1 : length(th1)
-  #     # gx1 = th1[i].gx; gx2 = th2[i].gx;
-  #     # gy1 = th1[i].gy; gy2 = th2[i].gy;
-  #     # println("gx: $gx1 vs $gx2, gy: $gy1 vs $gy2")
-  #     # tmp = tmp + abs(gx1-gx2) + abs(gy1-gy2)
-  #     for field in fieldnames(TraceHeader)
-  #         tmp = tmp + abs(getfield(th1[i], field) - getfield(th2[i], field))
-  #     end
-  # end
-  for field in fieldnames(FileHeader)
-      tmp = tmp + abs(getfield(th1, field) - getfield(th2, field))
-  end
-  return tmp
-end
-
-# create two cubes for the two source line, assume the boat is driving in the opposite direction
-# first source line 317-631
-
-
-# plot common shot gather
+# plot commands via seismic unix
 tmp = "/home/wgao1/BP_valhall/line2/figure/p1.bin"; tmpfid = open(tmp, "w"); write(tmpfid, vec(data1[:,:,10])); close(tmpfid);
 tmp = "/home/wgao1/BP_valhall/line2/figure/p2.bin"; tmpfid = open(tmp, "w"); write(tmpfid, vec(data1[:,:,110])); close(tmpfid);
 tmp = "/home/wgao1/BP_valhall/line2/figure/p3.bin"; tmpfid = open(tmp, "w"); write(tmpfid, vec(data1[:,:,210])); close(tmpfid);
@@ -451,35 +486,8 @@ psimage < /home/wgao1/BP_valhall/line2/figure/r210.bin xbox=0.5 ybox=0.5 height=
 psimage < /home/wgao1/BP_valhall/line2/figure/r211.bin xbox=0.5 ybox=0.5 height=8 width=12 labelsize=15 n1=2000 label1="Time" n2=315 d2num=50 f2num=50 label2="Trace" perc=90 > /home/wgao1/BP_valhall/line2/figure/r211.eps
 psimage < /home/wgao1/BP_valhall/line2/figure/r212.bin xbox=0.5 ybox=0.5 height=8 width=12 labelsize=15 n1=2000 label1="Time" n2=315 d2num=50 f2num=50 label2="Trace" perc=90 > /home/wgao1/BP_valhall/line2/figure/r212.eps
 
+# download the figure to local machine
 scp -r wgao1@saig-ml.physics.ualberta.ca:/home/wgao1/BP_valhall/line2/figure /Users/wenlei/Desktop
-
-# seperated into component
-p1 = data[:,1:4:end]
-p2 = data[:,2:4:end]
-p3 = data[:,3:4:end]
-p4 = data[:,4:4:end]
-
-figure(figsize=(10,10)); imshow(p4, vmax=0.01, vmin=-0.01, cmap="seismic");
-
-# plotting with su
-tmp = "/home/wgao1/BP_valhall/line2/figure/p1.bin"; tmpfid = open(tmp, "w"); write(tmpfid, vec(p1)); close(tmpfid);
-tmp = "/home/wgao1/BP_valhall/line2/figure/p2.bin"; tmpfid = open(tmp, "w"); write(tmpfid, vec(p2)); close(tmpfid);
-tmp = "/home/wgao1/BP_valhall/line2/figure/p3.bin"; tmpfid = open(tmp, "w"); write(tmpfid, vec(p3)); close(tmpfid);
-tmp = "/home/wgao1/BP_valhall/line2/figure/p4.bin"; tmpfid = open(tmp, "w"); write(tmpfid, vec(p4)); close(tmpfid);
-
-psimage < /home/wgao1/BP_valhall/line2/figure/p1.bin xbox=0.5 ybox=0.5 height=8 width=12 labelsize=15 n1=2000 label1="Time" n2=2414 d2num=200 f2num=200 label2="Trace" perc=90 > /home/wgao1/BP_valhall/line2/figure/p1.eps
-psimage < /home/wgao1/BP_valhall/line2/figure/p2.bin xbox=0.5 ybox=0.5 height=8 width=12 labelsize=15 n1=2000 label1="Time" n2=2414 d2num=200 f2num=200 label2="Trace" perc=90 > /home/wgao1/BP_valhall/line2/figure/p2.eps
-psimage < /home/wgao1/BP_valhall/line2/figure/p3.bin xbox=0.5 ybox=0.5 height=8 width=12 labelsize=15 n1=2000 label1="Time" n2=2414 d2num=200 f2num=200 label2="Trace" perc=90 > /home/wgao1/BP_valhall/line2/figure/p3.eps
-psimage < /home/wgao1/BP_valhall/line2/figure/p4.bin xbox=0.5 ybox=0.5 height=8 width=12 labelsize=15 n1=2000 label1="Time" n2=2414 d2num=200 f2num=200 label2="Trace" perc=90 > /home/wgao1/BP_valhall/line2/figure/p4.eps
-
-# separate into two lines
-for i = 2 : length(sy)
-    if abs(sy[i] - sy[i-1]) > 4000
-       println("$i")
-    end
-end
-# organize the data into two cube
-
 
 # 1. gaining control
 # 2. time shift in frequency domain
@@ -568,8 +576,3 @@ function DataShiftNoPad(d::Array{Tv,3}, shift::Vector{Tv}, dt::Tv) where Tv<:Flo
     ds = real(ifft(df,1))
     return ds
 end
-
-
-# 3. sorting in common receiver gather
-
-# 4. testing write segy file
