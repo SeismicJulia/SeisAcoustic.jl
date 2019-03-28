@@ -2,6 +2,7 @@ using SeisAcoustic
 
 # the path to segy file
 work_dir = "/home/wgao1/australia_OBN";
+
 # work_dir = "/Users/wenlei/Desktop/OBC_2D";
 path_sgy = joinpath(work_dir, "hydro.segy");
 
@@ -20,12 +21,18 @@ num_traces = convert(Int64, (tmp - 3600) / (240+sizeof(Float32)*file_header.ns))
 traces_header = extract_traces_header(path_sgy; print_interval=100000);
 
 # print the value of the fields of trace header
-fields =[:sx, :sy, :gx, :gy]
+fields = [:sx, :sy, :gx, :gy]
 coor = extract_field_trace_header(traces_header, fields; istart=1, iend=length(traces_header));
 
+fields = [:ep]
+ep = extract_field_trace_header(traces_header, fields; istart=1, iend=length(traces_header));
 
+# extract the coordinate
+function sort_CSG(coor::Matrix{Real})
 
+    while
 
+end
 
 for i = 1 : 500
     sx = traces_header[i].sx
