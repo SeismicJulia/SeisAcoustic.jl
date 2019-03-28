@@ -2,7 +2,7 @@ using SeisAcoustic
 
 # the path to segy file
 work_dir = "/home/wgao1/BP_valhall/line2";
-path_sgy = joinpath(work_dir, "obc.sgy");
+path_sgy = joinpath(work_dir, "shot_line2.sgy");
 
 # read text file header
 text_header = read_text_header(path_sgy);
@@ -40,8 +40,9 @@ idx = 317;
 (th1, data1) = read_one_shot(path_sgy, path_tab, idx);
 
 # dimensions of data cube
-num_samples   = Int64(file_header.ns)
+num_samples   = 2000
 num_receivers = 2414
+num_sources   = 315
 
 # prepare one common source line shot 317 - 631
 idx_l=317; idx_u=631;
@@ -65,53 +66,96 @@ path_out2 = joinpath(work_dir, "shot_line2.segy");
 (text_header2, file_header2, traces_header2, data2) = read_segy_file(path_out2);
 data2 = reshape(data2, num_samples, num_receivers, num_sources);
 
-
-idx = 500
-imshow(data1[:,1:idx], vmax=0.001, vmin=-0.001, cmap="gray", aspect=0.3)
-tb  = zeros(Int64, idx)
-for i = 1 : idx
-    tb[i] = round(Int64, traces_header1[i].offset / 1500 / 0.004)
-end
-plot(1:idx, tb)
-
-
-
-
-
-function test(trace_header)
-
-    distance  = sqrt( (trace_header.gx - trace_header.sx)^2 + (trace_header.gy - trace_header.sy)^2)
-
-    return distance
-
+# clipping the common receiver gathers simultaneously
+dc1 = copy(data1);
+dc2 = copy(data2);
+for i = 1 : num_receivers
+    tmp1 = dc1[:,i,:]
+    tmp2 = dc2[:,i,:]
+    val  = quantile(abs.(vcat(vec(tmp1), vec(tmp2))), 0.90)
+    dc1[:,i,:] = clamp.(tmp1, -val, val)
+    dc2[:,i,:] = clamp.(tmp2, -val, val)
+    println("$i")
 end
 
+# save the clipped data
+path_out1 = joinpath(work_dir, "clip_line1.segy");
+write_segy_file(path_out1, text_header1, file_header1, traces_header1, dc1);
+path_out2 = joinpath(work_dir, "clip_line2.segy");
+write_segy_file(path_out2, text_header2, file_header2, traces_header2, dc2);
 
-function automatic_gian_control(path_in::Ts, path_out::Ts) where {Ts<:String}
+# plotting
+idx = 2414
+figure(); imshow(dc1[:,idx,:], cmap="gray", aspect=0.2)
+figure(); imshow(dc2[:,idx,:], cmap="gray", aspect=0.2)
 
-    (text_header, file_header, traces_header, data) = read_segy_file(path_in)
+# random time shift the second shot line
+tau = 4.0 * rand(num_sources);
+path_rts = joinpath(work_dir, "random_time_shift.bin")
+fp = open(path_rts, "w")
+write(fp, num_sources);
+write(fp, tau); close(fp);
 
+# apply the time shift in time domain
+ds = copy(dc1)
+
+# loop over sources
+for i = 1 : num_receivers
+
+    #
+    for j = 1 : num_sources
 end
 
-num = 300
-offset = zeros(Int32, num)
-for i = 1 : num
-    offset[i] = traces_header1[i].offset
-end
 
-din = data1[:,1:num];
-function foo(offset, din)
 
-    (nt, n1) = size(din)
-    dout     = similar(din)
-    for i = 1 : n1
-        d = agc(offset[i], din[:,i])
-        dout[:,i] = d[:]
+idx = 1
+tmp1 = data1[:,idx,:];
+val1 = quantile(abs.(vec(tmp1)), 0.90)
+tmpc1= clamp.(tmp1, -val1, val1)
+
+tmp2 = data2[:,idx,:];
+val2 = quantile(abs.(vec(tmp2)), 0.90)
+tmpc2= clamp.(tmp2, -val2, val2)
+
+
+figure(); imshow(tmpc1, cmap="gray", aspect=0.2)
+figure(); imshow(tmpc2, cmap="gray", aspect=0.2)
+
+
+
+
+
+
+
+
+function rms_agc(data; hwl=0.25)
+
+    n = size(data, 2)
+    dout = copy(data)
+    for i = 1 : n
+        dout[:,i] = agc(dout[:,i]; half_window_length=hwl)
     end
     return dout
 end
 
-dout = foo(offset, din);
+function tsquare(d; dt=0.004)
+
+    (nt, n1) = size(d)
+    dout= copy(d)
+
+    for i = 1 : nt
+        t = (i-1) * dt
+
+        for j = 1 : n1
+            dout[i,j] = dout[i,j] * t^2
+        end
+    end
+    return dout
+end
+
+
+
+
 
 """
    automatic gaining control applied to one trace, hwl is the half window length in time,
@@ -216,16 +260,6 @@ function agc(trace::Vector{Tv}; half_window_length=0.5, dt=0.004, drms=1.0, delt
 
     return data
 
-end
-
-function tsquare_gain(d; dt=0.004)
-    nt  = length(d)
-    dout= copy(d)
-    for i = 1 : nt
-        t = (i-1) * dt
-        dout[i] = dout[i] * t^2
-    end
-    return dout
 end
 
 gx1 = zeros(Int32, num_receivers)
