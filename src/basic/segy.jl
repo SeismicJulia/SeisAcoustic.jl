@@ -693,6 +693,76 @@ function read_traces_header(path_hdr::String; print_interval=10000)
 end
 
 """
+   extract the value of selected fields of traces header, the field is specified
+by fields and the output is an 2D array of Int32.
+"""
+function extract_field_trace_header(thdr::Vector{TraceHeader}, fields::Vector{Symbol};
+         istart=1, iend=10000, idx=Vector{Int}(undef, 0), print_interval=10000)
+
+    # number of fields will be extracted
+    num_field = length(fields)
+
+    # number of traces
+    if length(idx) == 0
+       num_traces = iend - istart + 1
+       idx = collect(istart : iend)
+    else
+       num_traces = length(idx)
+    end
+
+    # allocate memory to save the output
+    dout = zeros(Int32, num_traces, num_field)
+
+    # loop over the selected traces
+    icount = 1
+    for i in idx
+
+        # loop over the fields
+        for j = 1 : num_field
+            dout[icount, j] = getfield(thdr[i], fields[j])
+        end
+        icount = icount + 1
+
+        #print info
+        if (icount % print_interval) == 0
+           println("finished $icount traces")
+        end
+    end
+
+    # return the value
+    return dout
+end
+
+"""
+   print the value of selected fields of trace header
+"""
+function print_field_trace_header(thdr::Vector{TraceHeader}, fields::Vector{Symbol};
+         istart=1, iend=10000, idx=Vector{Int}(undef,0))
+
+    # number of fields will be printed
+    num_field = length(fields)
+
+    # number of traces
+    if length(idx) == 0
+       idx = collect(istart : iend)
+    end
+
+    # loop over the selected traces
+    for i in idx
+
+        @printf("trace: %8d ", i)
+        # loop over the field
+        for j = 1 : num_field
+            print(fields[j])
+            val = getfield(thdr[i], fields[j])
+            @printf(": %8d ", val)
+        end
+        @printf("\n")
+    end
+    return nothing
+end
+
+"""
    save the byte location of trace header
 """
 const trace_header_location = Dict(

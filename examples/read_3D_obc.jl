@@ -1,22 +1,32 @@
 using SeisAcoustic
 
 # the path to segy file
-# work_dir = "/home/wgao1/australia_OBN";
-work_dir = "/Users/wenlei/Desktop/OBC_2D";
+work_dir = "/home/wgao1/australia_OBN";
+# work_dir = "/Users/wenlei/Desktop/OBC_2D";
 path_sgy = joinpath(work_dir, "hydro.segy");
 
 # read text file header
-thdr = read_text_header(path_sgy);
+text_header = read_text_header(path_sgy);
+print_text_header(text_header);
 
 # read file header
-fhdr = read_file_header(path_sgy);
+file_header = read_file_header(path_sgy);
 
 # number of traces
 tmp = filesize(path_sgy);
-num_traces = convert(Int64, (tmp - 3600) / (240+sizeof(Float32)*fhdr.ns))
+num_traces = convert(Int64, (tmp - 3600) / (240+sizeof(Float32)*file_header.ns))
 
-# read all the trace header
-traces_header = extract_traces_header(path_sgy; print_interval=1000);
+# extract all the traces' header from segy file
+traces_header = extract_traces_header(path_sgy; print_interval=100000);
+
+# print the value of the fields of trace header
+fields =[:sx, :sy, :gx, :gy]
+coor = extract_field_trace_header(traces_header, fields; istart=1, iend=length(traces_header));
+
+
+
+
+
 for i = 1 : 500
     sx = traces_header[i].sx
     sy = traces_header[i].sy

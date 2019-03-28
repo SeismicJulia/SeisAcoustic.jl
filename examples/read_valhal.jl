@@ -66,6 +66,168 @@ path_out2 = joinpath(work_dir, "shot_line2.segy");
 data2 = reshape(data2, num_samples, num_receivers, num_sources);
 
 
+idx = 500
+imshow(data1[:,1:idx], vmax=0.001, vmin=-0.001, cmap="gray", aspect=0.3)
+tb  = zeros(Int64, idx)
+for i = 1 : idx
+    tb[i] = round(Int64, traces_header1[i].offset / 1500 / 0.004)
+end
+plot(1:idx, tb)
+
+
+
+
+
+function test(trace_header)
+
+    distance  = sqrt( (trace_header.gx - trace_header.sx)^2 + (trace_header.gy - trace_header.sy)^2)
+
+    return distance
+
+end
+
+
+function automatic_gian_control(path_in::Ts, path_out::Ts) where {Ts<:String}
+
+    (text_header, file_header, traces_header, data) = read_segy_file(path_in)
+
+end
+
+num = 300
+offset = zeros(Int32, num)
+for i = 1 : num
+    offset[i] = traces_header1[i].offset
+end
+
+din = data1[:,1:num];
+function foo(offset, din)
+
+    (nt, n1) = size(din)
+    dout     = similar(din)
+    for i = 1 : n1
+        d = agc(offset[i], din[:,i])
+        dout[:,i] = d[:]
+    end
+    return dout
+end
+
+dout = foo(offset, din);
+
+"""
+   automatic gaining control applied to one trace, hwl is the half window length in time,
+"""
+function agc(offset, trace::Vector{Tv}; half_window_length=0.5, vel=1500, dt=0.004, drms=1.0) where {Tv<:Real}
+
+    nt   = length(trace)
+    data = copy(trace)
+
+    dtime = offset / vel
+    istart= floor(Int64, dtime / dt)
+    hwl   = round(Int64, half_window_length/dt)
+    wl    = 2 * hwl + 1
+    ratio = 1.0
+    crms  = 0.0
+
+    if istart - hwl < 1
+       istart = hwl + 1
+    end
+
+    iend = nt - hwl
+    if iend <= istart
+       println("window size is too big")
+       return data
+    end
+
+    # compute desired rms amplitude from seismic data
+    if drms == 0.0
+       idx  = istart
+       il   = istart - hwl
+       iu   = istart + hwl
+       for i = il : iu
+           drms = drms + trace[i]^2
+       end
+       drms = sqrt(drms / wl)
+       crms = drms
+    end
+
+    # boost the middle part of the data
+    for idx = istart+1 : iend
+        crms= sqrt((crms^2 * wl - trace[idx-hwl-1]^2 + trace[idx+hwl]^2)/wl)
+        ratio = drms / crms
+        data[idx] = data[idx] * ratio
+    end
+
+    # boost the last hwl samples
+    for idx = iend+1 : nt
+        data[idx] = data[idx] * ratio
+    end
+
+    return data
+
+end
+
+# start from the first sample
+function agc(trace::Vector{Tv}; half_window_length=0.5, dt=0.004, drms=1.0, delta=1e-16) where {Tv<:Real}
+
+    nt   = length(trace)
+    data = copy(trace)
+
+    hwl = round(Int64, half_window_length/dt)
+    wl  = 2 * hwl + 1
+
+    if wl > nt
+       println("window size is bigger than the length of input data")
+       return data
+    end
+    # the rest of the code can handle the case when nt = wl
+
+    # the start and end index of window center
+    istart= hwl + 1
+    iend  = nt  - hwl
+
+    # set crms as the rms amplitude of the first window
+    crms  = 0.0
+    il = istart - hwl
+    iu = istart + hwl
+    for i = il : iu
+        crms = crms + trace[i]^2
+    end
+    crms = sqrt(crms / wl)
+
+    # the ratio between drms and crms
+    ratio = drms / (crms+delta)
+
+    # apply to the samples in the first half of window
+    for i = 1 : istart
+        data[i] = data[i] * ratio
+    end
+
+    # loop over from the second to the last window
+    for idx = istart+1 : iend
+        crms= sqrt((crms^2 * wl - trace[idx-hwl-1]^2 + trace[idx+hwl]^2)/wl)
+        ratio = drms / (crms+delta)
+        data[idx] = data[idx] * ratio
+    end
+
+    # boost the last hwl samples
+    for idx = iend+1 : nt
+        data[idx] = data[idx] * ratio
+    end
+
+    return data
+
+end
+
+function tsquare_gain(d; dt=0.004)
+    nt  = length(d)
+    dout= copy(d)
+    for i = 1 : nt
+        t = (i-1) * dt
+        dout[i] = dout[i] * t^2
+    end
+    return dout
+end
+
 gx1 = zeros(Int32, num_receivers)
 gy1 = zeros(Int32, num_receivers)
 gx2 = zeros(Int32, num_receivers)
@@ -161,6 +323,10 @@ end
 path_out = joinpath(work_dir, "test.segy")
 write_segy_file(path_out, text_header, file_header, th1, data1);
 (text3, fh3, th3, data3) = read_segy_file(path_out);
+
+
+
+
 
 
 
