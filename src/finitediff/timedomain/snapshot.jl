@@ -35,8 +35,8 @@ end
 """
 function Wavefield(params::ModelParams)
 
-    data_format = par.data_format
-    N           = par.nz * par.nx
+    data_format = params.data_format
+    N           = params.nz * params.nx
 
     return Wavefield(zeros(data_format,N), zeros(data_format,N), zeros(data_format,N))
 end
@@ -44,10 +44,10 @@ end
 """
    Crop the PML layers of snapshot and sum pz, px to obtain wavefield at one time step
 """
-function sample_spt2wavefield(spt::Snapshot, params::ModelParams)
+function sample_spt2wfd(spt::Snapshot, params::ModelParams)
 
     # initial a empty wavefield
-    wfd = Wavefield(par)
+    wfd = Wavefield(params)
 
     i = 0
     for j in params.spt2wfd
@@ -65,10 +65,10 @@ end
 function snapshot_header(params::ModelParams)
 
     # the size of data
-    n1 = par.Nz
-    n2 = par.Nx
+    n1 = params.Nz
+    n2 = params.Nx
     n3 = 4       # include vz, vx, pz, px
-    n4 = par.nt
+    n4 = params.nt
 
     # label
     label1="z-axis"
@@ -77,8 +77,8 @@ function snapshot_header(params::ModelParams)
     label4="time step"
 
     return RegularSampleHeader(n1=n1, n2=n2, n3=n3, n4=n4,
-           o1=1.0, o2=1.0, o3=1.0, o4=1.0,
-           d1=1.0, d2=1.0, d3=1.0, d4=1.0,
+           o1=0.0      , o2=0.0      , o3=1.0, o4=0.0      ,
+           d1=params.dz, d2=params.dx, d3=1.0, d4=params.dt,
            label1=label1, label2=label2, label3=label3, label4=label4,
            title="snapshots", data_format=params.data_format)
 end
@@ -100,7 +100,8 @@ end
 """
 function read_one_snapshot(path::String, it::Int)
 
-    hdr = read_RSdata(path, data_flag=false)
+    hdr = read_RSheader(path)
+
     N   = hdr.n1 * hdr.n2
     esize = sizeof(hdr.data_format)
 
@@ -112,6 +113,7 @@ function read_one_snapshot(path::String, it::Int)
     vx = zeros(hdr.data_format, N); read!(fid, vx);
     pz = zeros(hdr.data_format, N); read!(fid, pz);
     px = zeros(hdr.data_format, N); read!(fid, px);
+    close(fid)
 
     return Snapshot(vz, vx, pz, px)
 end
@@ -122,10 +124,10 @@ end
 function wavefield_header(params::ModelParams)
 
     # the size of data
-    n1 = par.nz
-    n2 = par.nx
+    n1 = params.nz
+    n2 = params.nx
     n3 = 3      # include(vz, vx, p)
-    n4 = par.nt
+    n4 = params.nt
 
     # label
     label1="z-axis"
@@ -134,10 +136,10 @@ function wavefield_header(params::ModelParams)
     label4="time step"
 
     return RegularSampleHeader(n1=n1, n2=n2, n3=n3, n4=n4,
-           o1=1.0, o2=1.0, o3=1.0, o4=1.0,
-           d1=1.0, d2=1.0, d3=1.0, d4=1.0,
+           o1=0.0, o2=0.0, o3=1.0, o4=0.0,
+           d1=params.dz, d2=params.dx, d3=1.0, d4=params.dt,
            label1=label1, label2=label2, label3=label3, label4=label4,
-           title="wavefield", data_format=par.data_format)
+           title="wavefield", data_format=params.data_format)
 end
 
 """
@@ -171,11 +173,35 @@ function append_one_wavefield(fid::IOStream, spt::Snapshot, params::ModelParams)
 end
 
 """
+   save the wavefield at the last time step in a independent file
+"""
+function write_wavefield(path::String, wfd::Wavefield)
+
+    # length of wavefield
+    n1 = length(wfd.vz)
+    data_format = eltype(wfd.vz)
+
+    hdr = RegularSampleHeader(n1=n1, n2=3,
+                              o1=1 , o2=1,
+                              d1=1 , d2=1,
+                              label1="wavefield value", label2="component",
+                              title="last wavefield", data_format=data_format)
+
+    fid = write_RSheader(path, hdr)
+    write(fid, wfd.vz)
+    write(fid, wfd.vx)
+    write(fid, wfd.p )
+    close(fid)
+
+    return nothing
+end
+
+"""
    read one wavefield at the time step it
 """
 function read_one_wavefield(path::String, it::Int64)
 
-    hdr = read_USdata(path, data_flag=false)
+    hdr = read_RSheader(path)
     N   = hdr.n1 * hdr.n2
     esize = sizeof(hdr.data_format)
 
@@ -186,6 +212,7 @@ function read_one_wavefield(path::String, it::Int64)
     vz = zeros(hdr.data_format, N); read!(fid, vz);
     vx = zeros(hdr.data_format, N); read!(fid, vx);
     p  = zeros(hdr.data_format, N); read!(fid, p );
+    close(fid)
 
     return Wavefield(vz, vx, p)
 end
@@ -206,10 +233,10 @@ function pressure_header(params::ModelParams)
     label3="time step"
 
     return RegularSampleHeader(n1=n1, n2=n2, n3=n3,
-           o1=1.0, o2=1.0, o3=1.0,
-           d1=1.0, d2=1.0, d3=1.0,
+           o1=0.0, o2=0.0, o3=1.0,
+           d1=params.dz, d2=params.dx, d3=params.dt,
            label1=label1, label2=label2, label3=label3,
-           title="pressure", data_format=par.data_format)
+           title="pressure", data_format=params.data_format)
 end
 
 """
@@ -218,7 +245,7 @@ end
 function append_one_pressure(fid::IOStream, spt::Snapshot, params::ModelParams)
 
     # length of pressure vector
-    N = par.nz * par.nx
+    N = params.nz * params.nx
 
     for i = 1 : N
         idx = params.spt2wfd[i]
@@ -235,7 +262,7 @@ end
 """
 function read_one_pressure(path::String, it::Int64)
 
-    hdr = read_RSdata(path, data_flag=false)
+    hdr = read_RSheader(path)
     N   = hdr.n1 * hdr.n2
     esize = sizeof(hdr.data_format)
 
@@ -311,96 +338,79 @@ function WavefieldBound(params::ModelParams; flag=1)
 end
 
 """
-   write the boundary values of params.nt+1 time steps and the last wavefield
+   Create the  RS header for wavefield boundary
+"""
+function boundary_header(params::ModelParams)
+
+    # the size of data
+    n1 = length(params.spt2bnd)
+    n2 = 3                      # include(vz, vx, p)
+
+    # the extra boundary value is used to compute time derivative of source-side wavefield
+    # via central finite difference
+    n3 = params.nt+1
+
+    # label
+    label1="elements"
+    label2="component"
+    label3="time step"
+
+    return RegularSampleHeader(n1=n1, n2=3, n3=n3,
+                               o1=0.0, o2=0.0, o3=1.0, o4=0.0,
+                               d1=0.0, d2=0.0, d3=params.dt,
+                               label1=label1, label2=label2, label3=label3,
+                               title="wavefield boundaries", data_format=params.data_format)
+end
+
+"""
+   write the boundary values for all time steps
 """
 function write_boundary(path_bnd::Ts, bnd::WavefieldBound) where {Ts<:String}
 
-    # write boundary wavefield as a 3D cube
-    (n1, nt) = size(bnd.vz)
-    data_format = eltype(bnd.vz)
+    # create header for wavefield boundaries
+    hdr = boundary_header(params)
 
-    # first dimension is element, second is component, third is time step
-    # This arrangement enable us to read the boundary value at a specific time step
-    hdr = RegularSampleHeader(n1=n1, n2=3, n3=nt,
-                              o1=1 , o2=1, o3=1 ,
-                              d1=1 , d2=1, d3=1 ,
-                              label1="boundary value", label2="component", label3="time step",
-                              title="wavefield boundaries", data_format=data_format)
+    # check the size of bnd
+    if (hdr.n1, hdr.n3) != size(bnd.vz) || (hdr.n1, hdr.n3) != size(bnd.vx) || (hdr.n1, hdr.n3) != size(bnd.p)
+       error("size mismatch")
+    end
 
     # write the header of wavefield boundary
-    fid = write_RSdata(path_bnd, hdr)
+    fid = write_RSheader(path_bnd, hdr)
 
     # write the data of wavefield boundary
-    for i = 1 : nt
-        write(fid, view(bnd.vz[:,i]))
-        write(fid, view(bnd.vx[:,i]))
-        write(fid, view(bnd.p[:,i] ))
+    for i = 1 : hdr.n3
+        write(fid, view(bnd.vz, :, i))
+        write(fid, view(bnd.vx, :, i))
+        write(fid, view(bnd.p , :, i))
     end
-    close(fid)
-
-    # write the last wavefield
-    n1 = length(wfd.vz)
-    data_format = eltype(wfd.vz)
-
-    # first dimension is element, second is component
-    hdr = RegularSampleHeader(n1=n1, n2=3,
-                              o1=1 , o2=1,
-                              d1=1 , d2=1,
-                              label1="wavefield value", label2="component",
-                              title="last wavefield", data_format=data_format)
-
-    # write the header of wavefield
-    fid = write_RSdata(path_wfd, hdr)
-
-    # write the data
-    write(fid, wfd.vz)
-    write(fid, wfd.vx)
-    write(fid, wfd.p )
     close(fid)
 
     return nothing
 end
 
+"""
+   append wavefield boundary at one time step to the end of the file pointer "fid"
+"""
+function append_one_boundary(fid::IOStream, bnd::WavefieldBound)
+
+    write(fid, vec(bnd.vz))
+    write(fid, vec(bnd.vx))
+    write(fid, vec(bnd.p ))
+    return nothing
+end
+
+"""
+   read all the boundary value at all time steps
+"""
 function read_boundary(path::String)
 
-
+    (hdr, d) = read_RSdata(path)
+    return bnd = WavefieldBound(d[:,1,:], d[:,2,:], d[:,3,:])
 end
 
 """
-   read the boundary values and last wavefield
-"""
-function read_bound_wavefield(path::String)
-
-    fid = open(path, "r")
-    nb  = read(fid, Int64)
-    nt  = read(fid, Int64)
-    N   = read(fid, Int64)
-
-    indicator = read(fid, Int64)
-    if indicator == 1
-       data_format = Float32
-    elseif indicator == 2
-       data_format = Float64
-    end
-
-    # the wavefiled bounds
-    vz_bound = read(fid, data_format, nb * nt); vz_bound = reshape(vz_bound, nb, nt);
-    vx_bound = read(fid, data_format, nb * nt); vx_bound = reshape(vx_bound, nb, nt);
-     p_bound = read(fid, data_format, nb * nt);  p_bound = reshape( p_bound, nb, nt);
-
-    # the wavefield at last time step
-    vz = read(fid, data_format, N)
-    vx = read(fid, data_format, N)
-     p = read(fid, data_format, N)
-
-    # organize into structure
-    bnd = WavefieldBound(vz_bound, vx_bound, p_bound)
-    wfd = Wavefield(vz, vx, p)
-    return bnd, wfd
-end
-
-"""
-   compute the L2 norm of a snapshot
+   ||snapshot||
 """
 function l2norm_snapshot(spt::Snapshot)
 
@@ -412,7 +422,6 @@ function l2norm_snapshot(spt::Snapshot)
     L = L + dot(spt.px, spt.px)
 
     return sqrt(L)
-
 end
 
 """
@@ -421,10 +430,12 @@ end
 function minus_snapshot(spt1::Snapshot, spt2::Snapshot)
 
     N = length(spt1.vz)
-    vz = zeros(spt1.vz)
-    vx = zeros(spt1.vz)
-    pz = zeros(spt1.vz)
-    px = zeros(spt1.vz)
+    data_format = eltype(spt1.vz)
+
+    vz = zeros(data_format, N)
+    vx = zeros(data_format, N)
+    pz = zeros(data_format, N)
+    px = zeros(data_format, N)
 
     for i = 1 : N
         vz[i] = spt1.vz[i] - spt2.vz[i]
@@ -442,10 +453,12 @@ end
 function add_snapshot(spt1::Snapshot, spt2::Snapshot)
 
     N = length(spt1.vz)
-    vz = zeros(spt1.vz)
-    vx = zeros(spt1.vz)
-    pz = zeros(spt1.vz)
-    px = zeros(spt1.vz)
+    data_format = eltype(spt1.vz)
+
+    vz = zeros(data_format, N)
+    vx = zeros(data_format, N)
+    pz = zeros(data_format, N)
+    px = zeros(data_format, N)
 
     for i = 1 : N
         vz[i] = spt1.vz[i] + spt2.vz[i]
@@ -458,29 +471,35 @@ function add_snapshot(spt1::Snapshot, spt2::Snapshot)
 end
 
 """
-   reverse the order of snapshot or wavefield or pressure saved in a hard drive
+   reverse the order of snapshot or wavefield or pressure (path_tmp) and save them in the new
+file(path)
 """
 function reverse_order(path::String, path_tmp::String; data_type="snapshot")
 
-    hdr = read_USdata(path_tmp, data_flag=false)
-    fid = write_USdata(path, hdr)
+    # read header
+    hdr = read_RSheader(path_tmp)
 
+    # write header
+    fid = write_RSheader(path, hdr)
+
+    # the length of field at one time step
     if data_type == "snapshot" || data_type == "wavefield"
        N = hdr.n1 * hdr.n2 * hdr.n3
     elseif datatype == "pressure"
        N = hdr.n1 * hdr.n2
     end
 
-    elen = sizeof(hdr.data_format) * N
+    elength = sizeof(hdr.data_format) * N
     fid_tmp = open(path_tmp, "r")
+    tmp     = zeros(hdr.data_format, N)
 
     for it = 1 : hdr.nt
 
-        position = field_location[:data] + elen * (hdr.nt-it)
+        position = field_location[:data] + elength * (hdr.nt-it)
         seek(fid_tmp, position)
 
-        d = read(fid_tmp, hdr.data_format, N);
-        write(fid, d)
+        read!(fid_tmp, tmp);
+        write(fid, tmp)
     end
 
     close(fid_tmp)

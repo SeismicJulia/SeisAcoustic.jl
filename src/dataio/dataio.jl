@@ -26,7 +26,9 @@ export convert,
 # ======Regular Sampled data format========================
        RegularSampleHeader,
        field_location,
+       write_RSheader,
        write_RSdata,
+       read_RSheader,
        read_RSdata
 
 include("segy.jl")

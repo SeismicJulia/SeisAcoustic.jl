@@ -129,9 +129,13 @@ function RegularSampleHeader(;n1=0, n2=1, n3=1, n4=1, n5=1, n6=1, n7=1, n8=1, n9
          unit1="" , unit2="" , unit3="" , unit4="" , unit5="" , unit6="" , unit7="" , unit8="" , unit9="" ,
          title="" , data_format=Float32)
 
-    hdr = RegularSampleHeader(n1, n2, n3, n4, n5, n6, n7, n8, n9,
-                              o1, o2, o3, o4, o5, o6, o7, o8, o9,
-                              d1, d2, d3, d4, d5, d6, d7, d8, d9,
+    if !(data_format <: Number)
+       error("data_format must be a legal subtype of number")
+    end
+
+    hdr = RegularSampleHeader(Int64(n1)  , Int64(n2)  , Int64(n3)  , Int64(n4)  , Int64(n5)  , Int64(n6)  , Int64(n7)  , Int64(n8)  , Int64(n9)  ,
+                              Float64(o1), Float64(o2), Float64(o3), Float64(o4), Float64(o5), Float64(o6), Float64(o7), Float64(o8), Float64(o9),
+                              Float64(d1), Float64(d2), Float64(d3), Float64(d4), Float64(d5), Float64(d6), Float64(d7), Float64(d8), Float64(d9),
                               label1, label2, label3, label4, label5, label6, label7, label8, label9,
                               unit1 , unit2 , unit3 , unit4 , unit5 , unit6 , unit7 , unit8 , unit9 ,
                               title , data_format)
@@ -209,7 +213,7 @@ end
 """
    write regularly sampled data to binary file
 """
-function write_RSdata(path::String, hdr::RegularSampleHeader)
+function write_RSheader(path::String, hdr::RegularSampleHeader)
 
     #for each field, Int64, Float64,
     fid = open(path, "w")
@@ -308,14 +312,93 @@ function write_RSdata(path::String, hdr::RegularSampleHeader, d::Array{Tv}) wher
     # write the data
     write(fid, vec(d))
     close(fid)
-
 end
 
 """
-   read the uniform sampled data, produce two output, one is header and the other
+   read the header of regularly sampled data file
+"""
+function read_RSheader(path::String)
+
+    fid = open(path, "r")
+
+    # the size of each dimension
+    n1  = read(fid, Int64)
+    n2  = read(fid, Int64)
+    n3  = read(fid, Int64)
+    n4  = read(fid, Int64)
+    n5  = read(fid, Int64)
+    n6  = read(fid, Int64)
+    n7  = read(fid, Int64)
+    n8  = read(fid, Int64)
+    n9  = read(fid, Int64)
+
+    # start index
+    o1  = read(fid, Float64)
+    o2  = read(fid, Float64)
+    o3  = read(fid, Float64)
+    o4  = read(fid, Float64)
+    o5  = read(fid, Float64)
+    o6  = read(fid, Float64)
+    o7  = read(fid, Float64)
+    o8  = read(fid, Float64)
+    o9  = read(fid, Float64)
+
+    # interval aling each dimension
+    d1  = read(fid, Float64)
+    d2  = read(fid, Float64)
+    d3  = read(fid, Float64)
+    d4  = read(fid, Float64)
+    d5  = read(fid, Float64)
+    d6  = read(fid, Float64)
+    d7  = read(fid, Float64)
+    d8  = read(fid, Float64)
+    d9  = read(fid, Float64)
+
+    # read 11 string
+    indicator = convert(UInt8, '\n')
+    str = Vector{String}(undef, 19)
+    a = zeros(UInt8, 80 * 19)
+    read!(fid, a)
+    a = reshape(a, 80, 19)
+    for i = 1 : 19
+        k = 1
+        while a[k,i] != indicator
+              k = k + 1
+        end
+        k = k-1
+        str[i] = String(a[1:k,i])
+    end
+
+    # data format
+    indicator = read(fid, UInt8)
+    if indicator == 1
+       data_format = Float32
+    elseif indicator == 2
+       data_format = Float64
+    elseif indicator == 3
+       data_format = Complex{Float32}
+    elseif indicator == 4
+       data_format = Complex{Float64}
+    elseif indicator == 5
+       data_format = Int32
+    elseif indicator == 6
+       data_format = Int64
+    end
+
+    # construct a header
+    return RegularSampleHeader(n1, n2, n3, n4, n5, n6, n7, n8, n9,
+                               o1, o2, o3, o4, o5, o6, o7, o8, o9,
+                               d1, d2, d3, d4, d5, d6, d7, d8, d9,
+                               str[1] , str[2] , str[3] , str[4] , str[5] , str[6] , str[7] , str[8] , str[9] ,
+                               str[10], str[11], str[12], str[13], str[14], str[15], str[16], str[17], str[18],
+                               str[19], data_format)
+end
+
+"""
+   read the regularly sampled data, produce two output, one is header and the other
 is the data
 """
-function read_RSdata(path::String; data_flag=true)
+function read_RSdata(path::String)
 
     fid = open(path, "r")
 
@@ -393,30 +476,27 @@ function read_RSdata(path::String; data_flag=true)
 
     N = n1 * n2 * n3 * n4 * n5 * n6 * n7 * n8 * n9
     data = Vector{data_format}(undef, N)
+
     # read data
-    if data_flag
-       read!(fid, data)
-       if n9 != 1
-          data = reshape(data, n1, n2, n3, n4, n5, n6, n7, n8, n9)
-       elseif n8 != 1
-          data = reshape(data, n1, n2, n3, n4, n5, n6, n7, n8)
-       elseif n7 != 1
-          data = reshape(data, n1, n2, n3, n4, n5, n6, n7)
-       elseif n6 != 1
-          data = reshape(data, n1, n2, n3, n4, n5, n6)
-       elseif n5 != 1
-          data = reshape(data, n1, n2, n3, n4, n5)
-       elseif n4 != 1
-          data = reshape(data, n1, n2, n3, n4)
-       elseif n3 != 1
-          data = reshape(data, n1, n2, n3)
-       elseif n2 != 1
-          data = reshape(data, n1, n2)
-       end
-       close(fid)
-       return hdr, data
-    else
-       close(fid)
-       return hdr
+    read!(fid, data)
+    if n9 != 1
+       data = reshape(data, n1, n2, n3, n4, n5, n6, n7, n8, n9)
+    elseif n8 != 1
+       data = reshape(data, n1, n2, n3, n4, n5, n6, n7, n8)
+    elseif n7 != 1
+       data = reshape(data, n1, n2, n3, n4, n5, n6, n7)
+    elseif n6 != 1
+       data = reshape(data, n1, n2, n3, n4, n5, n6)
+    elseif n5 != 1
+       data = reshape(data, n1, n2, n3, n4, n5)
+    elseif n4 != 1
+       data = reshape(data, n1, n2, n3, n4)
+    elseif n3 != 1
+       data = reshape(data, n1, n2, n3)
+    elseif n2 != 1
+       data = reshape(data, n1, n2)
     end
+    close(fid)
+
+    return hdr, data
 end

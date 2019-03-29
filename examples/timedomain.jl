@@ -11,6 +11,11 @@ dz = 10; dx = 10;
 dt = 0.001; tmax = 2.0;
 fdom = 10;
 
-params = ModelParams(rho, vel, npml, free_surface, dz, dx, dt, tmax, fdom; data_format=Float32)
+params = ModelParams(rho, vel, npml, free_surface, dz, dx, dt, tmax, fdom;
+         data_format=Float32, order=3, fd_flag="ls")
+
+
+
+
 ofds = ObsorbFDStencil(params);
 rfds = RigidFDStencil(params);
