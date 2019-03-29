@@ -355,7 +355,8 @@ function read_RSdata(path::String; data_flag=true)
     # read 11 string
     indicator = convert(UInt8, '\n')
     str = Vector{String}(undef, 19)
-    a = read(fid, UInt8, 80 * 19)
+    a = zeros(UInt8, 80 * 19)
+    read!(fid, a)
     a = reshape(a, 80, 19)
     for i = 1 : 19
         k = 1

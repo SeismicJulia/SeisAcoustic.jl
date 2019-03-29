@@ -1,5 +1,5 @@
-# convert IBM data to IEEE
-primitive type IBMFloat32 32 end
+# define a primitive type for IBM floating number
+primitive type IBMFloat32 <: AbstractFloat 32 end
 
 ieeeOfPieces(fr::UInt32, exp::Int32, sgn::UInt32) = reinterpret(Float32, convert(UInt32,fr >>> 9) | convert(UInt32,exp << 23) | sgn) :: Float32
 

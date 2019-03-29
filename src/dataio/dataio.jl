@@ -23,7 +23,7 @@ export convert,
        create_lookup_table,
        read_lookup_table,
        read_one_shot,
-# ======Uniform Sampled data format========================
+# ======Regular Sampled data format========================
        RegularSampleHeader,
        field_location,
        write_RSdata,
