@@ -92,7 +92,7 @@ function Mvz(vz_pml::SparseMatrixCSC{Tv,Ti}, rho::Matrix{Tv},
     end
 
     MvzBvz = c_diag
-    MvzBp  = spdiagm(0 => denum) * kron(sparse(I,n,n), sparse(tmp))
+    MvzBp  = spdiagm(0 => denum) * kron(spdiagm(0=>ones(data_format,n)), sparse(tmp))
 
     return MvzBvz, MvzBp
 
@@ -143,7 +143,7 @@ function Mvz(rho::Matrix{Tv}, dz::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:Abstrac
         end
     end
 
-    MvzBp  = spdiagm(0 => denum) * kron(sparse(I,n,n), sparse(tmp))
+    MvzBp  = spdiagm(0 => denum) * kron(spdiagm(0=>ones(data_format,n)), sparse(tmp))
     return MvzBp
 end
 
@@ -197,7 +197,7 @@ function Mvx(vx_pml::SparseMatrixCSC{Tv,Ti}, rho::Matrix{Tv},
     end
 
     MvxBvx = c_diag
-    MvxBp  = spdiagm(0 => denum) * kron(sparse(tmp), sparse(I,m,m))
+    MvxBp  = spdiagm(0 => denum) * kron(sparse(tmp), spdiagm(0=>ones(data_format,m)))
 
     return MvxBvx, MvxBp
 
@@ -248,7 +248,7 @@ function Mvx(rho::Matrix{Tv}, dx::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:Abstrac
         end
     end
 
-    MvxBp  = spdiagm(0 => denum) * kron(sparse(tmp), sparse(I,m,m))
+    MvxBp  = spdiagm(0 => denum) * kron(sparse(tmp), spdiagm(0=>ones(data_format,m)))
     return MvxBp
 end
 
@@ -296,7 +296,7 @@ function Mpz(pz_pml::SparseMatrixCSC{Tv,Ti}, lambda::Matrix{Tv},
     end
 
     MpzBpz = c_diag
-    MpzBvz = spdiagm(0 => denum) * kron(sparse(I,n,n), sparse(tmp))
+    MpzBvz = spdiagm(0 => denum) * kron(spdiagm(0=>ones(data_format,n)), sparse(tmp))
 
     return MpzBpz, MpzBvz
 end
@@ -337,7 +337,7 @@ function Mpz(lambda::Matrix{Tv}, dz::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:Abst
         end
     end
 
-    MpzBvz = spdiagm(0 => denum) * kron(speye(data_format, n), sparse(tmp))
+    MpzBvz = spdiagm(0 => denum) * kron(spdiagm(0=>ones(data_format,n)), sparse(tmp))
     return MpzBvz
 
 end
@@ -385,7 +385,7 @@ function Mpx(px_pml::SparseMatrixCSC{Tv,Ti}, lambda::Matrix{Tv},
     end
 
     MpxBpx = c_diag
-    MpxBvx = spdiagm(0 => denum) * kron(sparse(tmp), speye(data_format, m))
+    MpxBvx = spdiagm(0 => denum) * kron(sparse(tmp), spdiagm(0=>ones(data_format,m)))
 
     return  MpxBpx, MpxBvx
 end
@@ -427,7 +427,7 @@ function Mpx(lambda::Matrix{Tv}, dx::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:Abst
         end
     end
 
-    MpxBvx = spdiagm(0 => denum) * kron(sparse(tmp), speye(data_format, m))
+    MpxBvx = spdiagm(0 => denum) * kron(sparse(tmp), spdiagm(0=>ones(data_format,m)))
 
     return MpxBvx
 end

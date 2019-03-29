@@ -13,4 +13,4 @@ fdom = 10;
 
 params = ModelParams(rho, vel, npml, free_surface, dz, dx, dt, tmax, fdom; data_format=Float32)
 ofds = ObsorbFDStencil(params);
-rfds
+rfds = RigidFDStencil(params);

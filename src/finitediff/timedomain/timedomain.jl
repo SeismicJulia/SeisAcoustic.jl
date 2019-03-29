@@ -8,9 +8,13 @@ export ModelParams,
        PMLCoefficients,
 # ==================== FD stencil ===============
        ObsorbFDStencil,
-       RigidFDStencil
+       RigidFDStencil,
+
+
+
 
 
 include("modelparams.jl")
 include("pml.jl")
 include("fdstencil.jl")
+include("snapshot.jl")
