@@ -2,10 +2,11 @@ module SeisAcoustic
 
     # the dependency of this module
     using LinearAlgebra,
-          Printf,          # formated print
-          DelimitedFiles,  # delimited text file
+          Printf,           # formated print
+          DelimitedFiles,   # delimited text file
           SparseArrays,     # finite-difference sparse matrix
-          DSP              # smoothing kernal
+          DSP,              # smoothing kernal
+          FFTW              # fourier transform
 
     # overloading Base function
     import Base.convert, Base.show
