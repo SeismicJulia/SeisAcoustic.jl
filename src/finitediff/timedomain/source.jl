@@ -14,7 +14,7 @@ end
 """
    create a ricker wavelet
 """
-function ricker(fdom::Tv, dt::Tv) where {Tv<:AbstractFloat}
+function ricker(fdoms, dt)
 
  	  nw = 2.2 / fdom / dt         # decide number of samples
 	  nw = 2*floor(Int64, nw/2)+1  # gaurantee the number of samples is odd
@@ -58,7 +58,7 @@ end
    fc is the high cut frequency of low-pass filter, hl is half length of filter
 and dt is sampling rate
 """
-function truncated_sinc(fc, hl, dt::Tv) where {Tv <: AbstractFloat}
+function tapered_sinc(fc, hl, dt) where {Tv <: AbstractFloat}
 
     # length of filter
     l = 2*hl
@@ -108,23 +108,23 @@ end
    initialize source structure, we provide four options to specify the source wavelet
    ricker (default option), sinc, miniphase, user provided.
 """
-function Source(isz::Ti, isx::Ti, params::ModelParams; ot=0.0, amp=1.0, p=Vector{Float32}(undef,0),
-                type_flag="ricker", f_hc=60.0, hl=128) where {Ti<:Int64}
+function Source(isz::Ti, isx::Ti, params::ModelParams; ot=0.0, amp=1.0, fdom=20.0, hl=128,
+                type_flag="ricker", p=Vector{Float32}(undef,0)) where {Ti<:Int64}
 
     # non-user provided source wavelet
     if length(p) == 0
        if type_flag == "ricker"
-          p = ricker(params.fdom, params.dt)
+          p = ricker(fdom, params.dt)
           p = amp * p
        elseif flag_type == "miniphase"
-          p = ricker(params.fdom, params.dt)
+          p = ricker(fdom, params.dt)
           p = convert2miniphase(p)
           p = amp * p
        elseif flag_type == "sinc"
-          f_hc = params.data_format(f_hc)
-          hl   = round(Int64, hl)
-          p = truncated_sinc(f_hc, hl, params.dt)
-          p = amp * p
+          fc = params.data_format(fdom)
+          hl = round(Int64, hl)
+          p  = tapered_sinc(fc, hl, params.dt)
+          p  = amp * p
        end
     end
 
@@ -144,18 +144,90 @@ function Source(isz::Ti, isx::Ti, params::ModelParams; ot=0.0, amp=1.0, p=Vector
 end
 
 """
-   get a vector of sources
+   get a vector of Source
 """
-function get_multi_sources(isz::Vector{Ti}, isx::Vector{Ti}, params::ModelParams;
-                           ot=0.0, amp=1.0, p=Vector{Float32}(undef,0), type_flag="ricker", f_hc=60.0, hl=128) where {Ti<:Int64}
+function get_multi_sources(isz::Vector{Ti}, isx::Vector{Ti}, params::ModelParams; ot=0.0, amp=1.0,
+                          fdom=20.0, hl=128, type_flag="ricker", p=Vector{Float32}(undef,0)) where {Ti<:Int64}
 
     # number of source
     ns = length(isz)
+    if length(isx) != ns
+       error("length of source coordinate mismatch")
+    end
+
+    # starting time
+    if typeof(ot) <: Real  # all sources starting at same time
+       ot = ot * ones(ns)
+    end
+    if length(ot) != ns
+       error("length of starting time ot mismatch")
+    end
+
+    # amplitude for each source
+    if typeof(amp) <: Real
+       amp = amp * ones(ns)
+    end
+    if length(amp) != ns
+       error("length of amplitude is wrong")
+    end
+
+    # dominant frequency for source wavelet
+    if typeof(fdom) <: Real
+       fdom = fdom * ones(ns)
+    end
+    if length(fdom) != ns
+       error("length of dominant frequency is wrong")
+    end
+
+    # sources wavelet(1. p is a Vector{Vector}; 2. p is a vector; 3. p 0 elemenets vector )
+    if length(p) == 0  # without user provided wavelet
+       if typeof(type_flag) == String               # all sources share same wavelet
+          wavelet_type = Vector{String}(undef, ns)
+          wavelet_type[:] .= type_flag
+          type_flag    = wavelet_type
+       elseif typeof(type_flag) == Vector{String}   # use different wavelet
+          if length(type_flag) != ns
+             error("length of type_flag mismatch")
+          end
+       end
+
+       # generate the specific source wavelet
+       p = Vector{Vector{params.data_format}}(ns)
+       for i = 1 : ns
+           if type_flag[i] == "ricker"
+              tmp = ricker(params.fdom, params.dt)
+              p[i]= amp[i] * tmp
+           elseif flag_type[i] == "miniphase"
+              tmp = ricker(params.fdom, params.dt)
+              tmp = convert2miniphase(tmp)
+              p[i]= amp[i] * tmp
+           elseif flag_type[i] == "sinc"
+              f_hc = params.data_format(f_hc)
+              hl   = round(Int64, hl)
+              tmp  = truncated_sinc(f_hc, hl, params.dt)
+              p[i] = amp[i] * tmp
+           end
+       end
+
+    elseif eltype(p) <: AbstractFloat   # all sources share same given wavelet
+       wavelet = Vector{Vector{params.data_format}}(undef, ns)
+       for i = 1 : ns
+       end
+
+    else                                # sources have different user-give wavelet
+
+    end
+
+    if length(p) != 0
+       wavelet = Vector{Vector{params.data_format}}(undef, ns)
+       for i = 1 : ns
+           wavelet[i] = convert(Vector{params.data_format}, p)
+       end
+
+    end
 
     # allocate memory for vector of sources
     srcs = Vector{Source}(undef, ns)
-
-    # loop over sources
     for i = 1 : ns
         srcs[i] = Source(isz[i], isx[i], ot[i], amp[i], par; wavelet_type=wavelet_type)
     end

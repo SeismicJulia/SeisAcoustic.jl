@@ -41,7 +41,6 @@ struct ModelParams{Ti<:Int64, Tv<:AbstractFloat}
     dt           :: Tv
     tmax         :: Tv
     nt           :: Ti
-    fdom         :: Tv
     rho          :: Matrix{Tv}
     vel          :: Matrix{Tv}
     fd_coefficients :: Vector{Tv}
@@ -57,7 +56,6 @@ function show(io::IO, params::ModelParams)
     @printf("nz = %4d, nx = %4d, npml = %4d\n", params.nz, params.nx, params.npml)
     @printf("dz = %4.1f, dx = %4.1f\n", params.dz, params.dx)
     @printf("time step size = %4.4f, max simulation time = %4.1f, number of step = %5d\n", params.dt, params.tmax, params.nt)
-    @printf("dominant frequency = %4.1f\n", params.fdom)
 
     # top boundary condition
     if params.free_surface
@@ -71,26 +69,6 @@ function show(io::IO, params::ModelParams)
 
     # order of finite difference precision
     @printf("order of finite difference=%3d\n", params.order)
-
-    return nothing
-end
-
-"""
-   test the finite difference stable condition
-"""
-function is_stable(vel::Matrix{Tv}, fdom::Tv, dz::Tv, dx::Tv, dt::Tv) where {Tv<:AbstractFloat}
-
-    vmax = maximum(vel)
-    vmin = minimum(vel)
-
-    h = vmin / 5 / (fdom*2)
-    d = minimum([dz, dx])
-    tt = 6*d / (7*sqrt(3)*vmax)
-
-    if dt > tt
-       println("maximum acceptable time step: $tt")
-       error("unstable finite difference grid")
-    end
 
     return nothing
 end
@@ -321,10 +299,31 @@ const fdc = [[0.1129042e1, -0.4301412e-1],
              [0.1264748e1, -0.1331606   , 0.4296909e-1, -0.1851897e-1, 0.8861071e-2, -0.4347073e-2, 0.2076101e-2, -0.9164925e-3, 0.3437446e-3, -0.7874250e-4]];
 
 """
+   test the stable condition of finite difference method
+"""
+function is_stable(vel::Matrix{Tv}, dz::Tv, dx::Tv, dt::Tv) where {Tv<:AbstractFloat}
+
+    vmax = maximum(vel)
+    beta = vmax * sqrt(1/(dz^2) + 1/(dx^2))
+    tt   = 1.0 / beta
+
+    if beta * dt >= 1.0
+       println("maximum acceptable time step: $tt")
+       println("current dt is $dt")
+       error("decrease dt or increase dz or dx")
+    end
+
+    return true
+end
+
+"""
    the constructor for ModelParams
 """
-function ModelParams(rho, vel, npml::Ti, free_surface::Bool, dz, dx, dt, tmax, fdom;
+function ModelParams(rho, vel, npml::Ti, free_surface::Bool, dz, dx, dt, tmax;
          data_format=Float32, order=2, fd_flag="taylor") where {Ti<:Int64}
+
+    # test the stable condition
+    is_stable(vel, dz, dx, dt)
 
     # get the size of the model
     (nz, nx) = size(rho)
@@ -339,10 +338,6 @@ function ModelParams(rho, vel, npml::Ti, free_surface::Bool, dz, dx, dt, tmax, f
     dx  = convert(data_format, dx)
     dt  = convert(data_format, dt)
     tmax= convert(data_format, tmax)
-    fdom= convert(data_format, fdom)
-
-    # check the stable condition
-    is_stable(vel, fdom, dz, dx, dt)
 
     # compute finite difference coefficients
     if fd_flag == "taylor"
@@ -373,7 +368,6 @@ function ModelParams(rho, vel, npml::Ti, free_surface::Bool, dz, dx, dt, tmax, f
 
     # call the default struct constructor
     return ModelParams(data_format, nz, nx, npml, free_surface, Nz, Nx, ntop,
-           spt2wfd, spt2bnd, bnd2wfd, dz, dx, dt, tmax, nt, fdom, rho, vel,
-           fd_coefficients, order)
+           spt2wfd, spt2bnd, bnd2wfd, dz, dx, dt, tmax, nt, rho, vel, fd_coefficients, order)
 
 end
