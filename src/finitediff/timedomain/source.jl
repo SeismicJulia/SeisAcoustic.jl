@@ -6,6 +6,7 @@ struct Source{Ti<:Int64, Tv<:AbstractFloat}
     isx     :: Ti  # horizontal index location
     src2spt :: Ti  # index mapping to snapshot
     src2wfd :: Ti  # index mapping to wavefield
+    dt      :: Tv
     it_min  :: Ti  # the index lower bound in time axis
     it_max  :: Ti  # the index upper bound in time axis
     p       :: Vector{Tv} # source wavelet
@@ -140,7 +141,7 @@ function Source(isz::Ti, isx::Ti, params::ModelParams; ot=0.0, amp=1.0, fdom=20.
     src2wfd = (isx-1) * params.nz + isz
 
     # call the default constructor
-    return Source(isz, isx, src2spt, src2wfd, it_min, it_max, p)
+    return Source(isz, isx, src2spt, src2wfd, params.dt, it_min, it_max, p)
 end
 
 """
@@ -179,7 +180,6 @@ function get_multi_sources(isz::Vector{Ti}, isx::Vector{Ti}, params::ModelParams
        error("length of dominant frequency is wrong")
     end
 
-    # sources wavelet(1. p is a Vector{Vector}; 2. p is a vector; 3. p 0 elemenets vector )
     if length(p) == 0  # without user provided wavelet
        if typeof(type_flag) == String               # all sources share same wavelet
           wavelet_type = Vector{String}(undef, ns)
@@ -192,118 +192,86 @@ function get_multi_sources(isz::Vector{Ti}, isx::Vector{Ti}, params::ModelParams
        end
 
        # generate the specific source wavelet
-       p = Vector{Vector{params.data_format}}(ns)
+       wavelet = Vector{Vector{params.data_format}}(ns)
        for i = 1 : ns
            if type_flag[i] == "ricker"
-              tmp = ricker(params.fdom, params.dt)
-              p[i]= amp[i] * tmp
+              tmp = amp[i] * ricker(fdom[i], params.dt)
+              wavelet[i] = convert(Vector{params.data_format}, tmp)
            elseif flag_type[i] == "miniphase"
-              tmp = ricker(params.fdom, params.dt)
-              tmp = convert2miniphase(tmp)
-              p[i]= amp[i] * tmp
+              tmp = ricker(fdom[i], params.dt)
+              tmp = amp[i] * convert2miniphase(tmp)
+              wavelet[i] = convert(Vector{params.data_format}, tmp)
            elseif flag_type[i] == "sinc"
-              f_hc = params.data_format(f_hc)
               hl   = round(Int64, hl)
-              tmp  = truncated_sinc(f_hc, hl, params.dt)
-              p[i] = amp[i] * tmp
+              tmp  = amp[i] * truncated_sinc(fdom, hl, params.dt)
+              wavelet[i] = convert(Vector{params.data_format}, tmp)
            end
        end
 
-    elseif eltype(p) <: AbstractFloat   # all sources share same given wavelet
-       wavelet = Vector{Vector{params.data_format}}(undef, ns)
-       for i = 1 : ns
-       end
-
-    else                                # sources have different user-give wavelet
-
-    end
-
-    if length(p) != 0
+    elseif eltype(p) <: AbstractFloat   # all sources share same user-given wavelet
        wavelet = Vector{Vector{params.data_format}}(undef, ns)
        for i = 1 : ns
            wavelet[i] = convert(Vector{params.data_format}, p)
        end
 
+    else                                # sources have different user-give wavelet
+       wavelet = Vector{Vector{params.data_format}}(undef, ns)
+       for i = 1 : ns
+           wavelet[i] = convert(Vector{params.data_format}, p[i])
+       end
     end
 
     # allocate memory for vector of sources
     srcs = Vector{Source}(undef, ns)
     for i = 1 : ns
-        srcs[i] = Source(isz[i], isx[i], ot[i], amp[i], par; wavelet_type=wavelet_type)
+        srcs[i] = Source(isz[i], isx[i], params; p=wavelet[i])
     end
     return srcs
 end
 
 """
-   randomly source starting time shift and make the starting time is the integer
-times the time interval.
-"""
-function random_start_time(ns::Ti, dt::Tv, s::Tv) where {Ti<:Int64, Tv<:AbstractFloat}
-
-    ot = s * rand(ns)
-    indt = round(Int64, ot/dt)
-    ot[:] = indt*dt
-
-    return convert(Vector{typeof(dt)}, ot)
-end
-
-"""
-   Add source to snapshot(scaled by dt to make them consistent with wave-equation)
+   Add source to snapshot (we add source to pressure terms, so the wavelet is caled by dt)
 """
 function add_source!(spt::Snapshot, src::Source, it::Int64)
 
-    # current times
-    tc = (it-1) * src.dt
-
     # add source
-    if src.ot <= tc <= src.tmax
+    if src.it_min <= it <= src.it_max
 
-       indt = it - round(Int64, src.ot / src.dt)
-       pos  = src.idx1
+       idx_t = it - src.it_min + 1
+       idx_p = src.src2spt
 
-       if src.vz_flag
-          # spt.vz[pos] = spt.vz[pos] + (src.p[indt] * dt) / par.rho[src.isz, src.isx]
-          spt.vz[pos] = spt.vz[pos] + (src.p[indt] * src.dt)
-       elseif src.vx_flag
-          # spt.vx[pos] = spt.vx[pos] + (src.p[indt] * dt) / par.rho[src.isz, src.isx]
-          spt.vx[pos] = spt.vx[pos] + (src.p[indt] * src.dt)
-       elseif src.p_flag
-          # spt.pz[pos] = spt.pz[pos] + src.p[indt] * dt / 2.0
-          # spt.px[pos] = spt.px[pos] + src.p[indt] * dt / 2.0
-          spt.pz[pos] = spt.pz[pos] + src.p[indt] * src.dt
-       else
-          error("either add to particle velocity or stress")
-       end
+       # equvialent to adding to pressure field
+       spt.pz[idx_p] = spt.pz[idx_p] + src.p[ind_t] * src.dt
     end
+
     return nothing
 end
 
 """
-   add source to wavefield
+   add source to wavefield, used for forward wavefield reconstruction
 """
 function add_source!(wfd::Wavefield, src::Source, it::Int64)
 
-    tc = (it-1) * src.dt
+    if src.it_min <= it <= src.it_max
 
-    if src.ot <= tc <= src.tmax
-       indt = it - round(Int64, src.ot / src.dt)
-       pos  = src.idx2
-       wfd.p[pos] = wfd.p[pos] + src.p[indt] * src.dt
+       idx_t = it - src.it_min + 1
+       idx_p = src.src2spt
+
+       wfd.p[idx_p] = wfd.p[idx_p] + src.p[ind_t] * src.dt
     end
     return nothing
 end
 
 """
-   subtract source from wavefield
+   subtract source from wavefield, used for backward wavefield reconstruction
 """
 function subtract_source!(wfd::Wavefield, src::Source, it::Int64)
 
-    tc = (it-1) * src.dt
+    if src.it_min <= it <= src.it_max
+       idx_t = it - src.it_min + 1
+       idx_p = src.src2spt
 
-    if src.ot <= tc <= src.tmax
-       indt = it - round(Int64, src.ot / src.dt)
-       pos  = src.idx2
-       wfd.p[pos] = wfd.p[pos] - src.p[indt] * src.dt
+       wfd.p[idx_p] = wfd.p[idx_p] - src.p[idx_t] * src.dt
     end
     return nothing
 end
@@ -314,6 +282,7 @@ function add_multi_sources!(spt::Snapshot, srcs::Vector{Source}, it::Int64)
     # number of sources
     ns = length(srcs)
 
+    # loop over each source
     for i = 1 : ns
         add_source!(spt, srcs[i], it)
     end
@@ -330,8 +299,8 @@ function time_range_multisources(srcs::Vector{Source})
     ns   = length(srcs)
 
     for i = 1 : ns
-        tmp1 = srcs[i].ot
-        tmp2 = srcs[i].tmax
+        tmp1 = (srcs[i].it_min-1) * srcs[i].dt
+        tmp2 = (srcs[i].it_max-1) * srcs[i].dt
 
         if tmp1 < tmin
            tmin = tmp1
@@ -344,9 +313,20 @@ function time_range_multisources(srcs::Vector{Source})
     return tmin, tmax
 end
 
-
-
 # ========================need to be updated ===================================
+# """
+#    randomly source starting time shift and make the starting time is the integer
+# times the time interval.
+# """
+# function random_start_time(ns::Ti, dt::Tv, s::Tv) where {Ti<:Int64, Tv<:AbstractFloat}
+#
+#     ot = s * rand(ns)
+#     indt = round(Int64, ot/dt)
+#     ot[:] = indt*dt
+#
+#     return convert(Vector{typeof(dt)}, ot)
+# end
+
 # """
 #    generate a snapshot via multiple sources
 # """
