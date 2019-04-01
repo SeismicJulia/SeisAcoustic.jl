@@ -390,13 +390,32 @@ function write_boundary(path_bnd::Ts, bnd::WavefieldBound) where {Ts<:String}
 end
 
 """
-   append wavefield boundary at one time step to the end of the file pointer "fid"
+   append the wavefield boundary at one time step to the end of fid
 """
-function append_one_boundary(fid::IOStream, bnd::WavefieldBound)
+function append_one_boundary(fid::IOStream, spt::Snapshot, params::ModelParams)
 
-    write(fid, vec(bnd.vz))
-    write(fid, vec(bnd.vx))
-    write(fid, vec(bnd.p ))
+    # length of one wavefield
+    N = length(params.spt2bnd)
+
+    # write vz
+    for i = 1 : N
+        idx = params.spt2bnd[i]
+        write(fid, spt.vz[idx])
+    end
+
+    # write vx
+    for i = 1 : N
+        idx = params.spt2bnd[i]
+        write(fid, spt.vx[idx])
+    end
+
+    # write p (pz+px)
+    for i = 1 : N
+        idx = params.spt2bnd[i]
+        write(fid, spt.pz[idx]+spt.px[idx])
+    end
+    flush(fid)
+
     return nothing
 end
 
@@ -470,43 +489,43 @@ function add_snapshot(spt1::Snapshot, spt2::Snapshot)
     return Snapshot(vz, vx, pz, px)
 end
 
-"""
-   reverse the order of snapshot or wavefield or pressure (path_tmp) and save them in the new
-file(path)
-"""
-function reverse_order(path::String, path_tmp::String; data_type="snapshot")
-
-    # read header
-    hdr = read_RSheader(path_tmp)
-
-    # write header
-    fid = write_RSheader(path, hdr)
-
-    # the length of field at one time step
-    if data_type == "snapshot" || data_type == "wavefield"
-       N = hdr.n1 * hdr.n2 * hdr.n3
-    elseif datatype == "pressure"
-       N = hdr.n1 * hdr.n2
-    end
-
-    elength = sizeof(hdr.data_format) * N
-    fid_tmp = open(path_tmp, "r")
-    tmp     = zeros(hdr.data_format, N)
-
-    for it = 1 : hdr.nt
-
-        position = field_location[:data] + elength * (hdr.nt-it)
-        seek(fid_tmp, position)
-
-        read!(fid_tmp, tmp);
-        write(fid, tmp)
-    end
-
-    close(fid_tmp)
-    close(fid)
-
-    return nothing
-end
+# """
+#    reverse the order of snapshot or wavefield or pressure (path_tmp) and save them in the new
+# file(path)
+# """
+# function reverse_order(path::String, path_tmp::String; data_type="snapshot")
+#
+#     # read header
+#     hdr = read_RSheader(path_tmp)
+#
+#     # write header
+#     fid = write_RSheader(path, hdr)
+#
+#     # the length of field at one time step
+#     if data_type == "snapshot" || data_type == "wavefield"
+#        N = hdr.n1 * hdr.n2 * hdr.n3
+#     elseif datatype == "pressure"
+#        N = hdr.n1 * hdr.n2
+#     end
+#
+#     elength = sizeof(hdr.data_format) * N
+#     fid_tmp = open(path_tmp, "r")
+#     tmp     = zeros(hdr.data_format, N)
+#
+#     for it = 1 : hdr.nt
+#
+#         position = field_location[:data] + elength * (hdr.nt-it)
+#         seek(fid_tmp, position)
+#
+#         read!(fid_tmp, tmp);
+#         write(fid, tmp)
+#     end
+#
+#     close(fid_tmp)
+#     close(fid)
+#
+#     return nothing
+# end
 
 #////////////////////// fixed them at this step ////////////////////////////////
 # """

@@ -107,10 +107,32 @@ end
 
 """
    initialize source structure, we provide four options to specify the source wavelet
-   ricker (default option), sinc, miniphase, user provided.
+ricker (default option), sinc, miniphase, user provided.
 """
-function Source(isz::Ti, isx::Ti, params::ModelParams; ot=0.0, amp=1.0, fdom=20.0, hl=128,
-                type_flag="ricker", p=Vector{Float32}(undef,0)) where {Ti<:Int64}
+function Source(sz::Tv, sx::Tv, params::ModelParams; location_flag="index", ot=0.0, amp=1.0, fdom=20.0, hl=128,
+                type_flag="ricker", p=Vector{Float32}(undef,0)) where {Tv <: Real}
+
+    # source location given index
+    if location_flag == "index"
+       isz = round(Int64, isz)
+       isx = round(Int64, isx)
+
+    # source location given as distance
+    elseif location_flag == "distance"
+       isz = round(Int64, sz/params.dz) + 1
+       isx = round(Int64, sx/params.dx) + 1
+    else
+       error("wrong specification of source location")
+    end
+
+    # error checking
+    if isz > params.nz || isx[i] > params.nx
+       error("source located outside of modeling area")
+    end
+
+    # the auxillary index mapping the location of source to snapshot or wavefield
+    src2spt = (isx+params.npml-1)*par.Nz + isz + params.ntop
+    src2wfd = (isx-1) * params.nz + isz
 
     # non-user provided source wavelet
     if length(p) == 0
@@ -136,10 +158,6 @@ function Source(isz::Ti, isx::Ti, params::ModelParams; ot=0.0, amp=1.0, fdom=20.
     it_min = floor(Int64, ot/params.dt) + 1
     it_max = it_min + nt - 1
 
-    # the auxillary index mapping the location of source to snapshot or wavefield
-    src2spt = (isx+params.npml-1)*par.Nz + isz + params.ntop
-    src2wfd = (isx-1) * params.nz + isz
-
     # call the default constructor
     return Source(isz, isx, src2spt, src2wfd, params.dt, it_min, it_max, p)
 end
@@ -147,13 +165,37 @@ end
 """
    get a vector of Source
 """
-function get_multi_sources(isz::Vector{Ti}, isx::Vector{Ti}, params::ModelParams; ot=0.0, amp=1.0,
-                          fdom=20.0, hl=128, type_flag="ricker", p=Vector{Float32}(undef,0)) where {Ti<:Int64}
+function get_multi_sources(sz::Vector{Tv}, sx::Vector{Tv}, params::ModelParams; location_flag="index", ot=0.0, amp=1.0,
+                          fdom=20.0, hl=128, type_flag="ricker", p=Vector{Float32}(undef,0)) where {Ti <: Real}
 
     # number of source
-    ns = length(isz)
-    if length(isx) != ns
+    ns = length(sz)
+    if length(sx) != ns
        error("length of source coordinate mismatch")
+    end
+
+    # source location given index
+    isz = zeros(Int64, ns)
+    isx = zeros(Int64, ns)
+    if location_flag == "index"
+       for i = 1 : ns
+           isz[i] = round(Int64, isz[i])
+           isx[i] = round(Int64, isx[i])
+       end
+
+    # source location given as distance
+    elseif location_flag == "distance"
+       isz[i] = round(Int64, sz[i]/params.dz) + 1
+       isx[i] = round(Int64, sx[i]/params.dx) + 1
+    else
+       error("wrong specification of source location")
+    end
+
+    # error checking
+    for i = 1 : ns
+        if isz[i] > params.nz || isx[i] > params.nx
+           error("source located outside of modeling area")
+        end
     end
 
     # starting time
@@ -214,7 +256,7 @@ function get_multi_sources(isz::Vector{Ti}, isx::Vector{Ti}, params::ModelParams
            wavelet[i] = convert(Vector{params.data_format}, p)
        end
 
-    else                                # sources have different user-give wavelet
+    else                                # sources have different user-given wavelet
        wavelet = Vector{Vector{params.data_format}}(undef, ns)
        for i = 1 : ns
            wavelet[i] = convert(Vector{params.data_format}, p[i])
@@ -241,7 +283,7 @@ function add_source!(spt::Snapshot, src::Source, it::Int64)
        idx_p = src.src2spt
 
        # equvialent to adding to pressure field
-       spt.pz[idx_p] = spt.pz[idx_p] + src.p[ind_t] * src.dt
+       spt.pz[idx_p] = spt.pz[idx_p] + src.p[idx_t] * src.dt
     end
 
     return nothing
@@ -263,6 +305,21 @@ function add_source!(wfd::Wavefield, src::Source, it::Int64)
 end
 
 """
+   add multi-sources simultaneously to snapshot
+"""
+function add_multi_sources!(spt::Snapshot, srcs::Vector{Source}, it::Int64)
+
+    # number of sources
+    ns = length(srcs)
+
+    # loop over each source
+    for i = 1 : ns
+        add_source!(spt, srcs[i], it)
+    end
+    return nothing
+end
+
+"""
    subtract source from wavefield, used for backward wavefield reconstruction
 """
 function subtract_source!(wfd::Wavefield, src::Source, it::Int64)
@@ -276,18 +333,7 @@ function subtract_source!(wfd::Wavefield, src::Source, it::Int64)
     return nothing
 end
 
-# inject multiple sources simultaneously
-function add_multi_sources!(spt::Snapshot, srcs::Vector{Source}, it::Int64)
 
-    # number of sources
-    ns = length(srcs)
-
-    # loop over each source
-    for i = 1 : ns
-        add_source!(spt, srcs[i], it)
-    end
-    return nothing
-end
 
 """
    find the time range of multiple sources

@@ -1,0 +1,7 @@
+do i = 1, n
+	 j1 = iA(i)
+	 j2 = iA(i+1) - 1
+	 do  j = j1, j2
+			 y(i) = y(i) + A(j) * x(jA(j))
+	 end do
+end do

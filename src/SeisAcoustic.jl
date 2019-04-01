@@ -6,7 +6,11 @@ module SeisAcoustic
           DelimitedFiles,   # delimited text file
           SparseArrays,     # finite-difference sparse matrix
           DSP,              # smoothing kernal
-          FFTW              # fourier transform
+          FFTW,             # fourier transform
+          BinDeps           # manage binary dependencies
+
+    # the absolute path to the binary dependency
+    const spmatveclib  = abspath(joinpath(splitdir(Base.source_path())[1],"..","deps","builds","spmatvec"))
 
     # overloading Base function
     import Base.convert, Base.show

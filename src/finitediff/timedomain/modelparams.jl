@@ -44,7 +44,6 @@ struct ModelParams{Ti<:Int64, Tv<:AbstractFloat}
     rho          :: Matrix{Tv}
     vel          :: Matrix{Tv}
     fd_coefficients :: Vector{Tv}
-    order        :: Ti
 end
 
 """
@@ -66,9 +65,6 @@ function show(io::IO, params::ModelParams)
 
     # data presicion (Float32, Float64)
     @printf("data_format=%16s\n", params.data_format)
-
-    # order of finite difference precision
-    @printf("order of finite difference=%3d\n", params.order)
 
     return nothing
 end
@@ -236,7 +232,6 @@ function get_index(nz::Ti, nx::Ti, npml::Ti, free_surface::Bool; order=2) where 
         icount = icount + nz
     end
 
-
     # map wavefield to the boundary of Wavefield
     # left side
     index3[1:order*nz] = collect(1:order*nz)
@@ -368,6 +363,6 @@ function ModelParams(rho, vel, npml::Ti, free_surface::Bool, dz, dx, dt, tmax;
 
     # call the default struct constructor
     return ModelParams(data_format, nz, nx, npml, free_surface, Nz, Nx, ntop,
-           spt2wfd, spt2bnd, bnd2wfd, dz, dx, dt, tmax, nt, rho, vel, fd_coefficients, order)
+           spt2wfd, spt2bnd, bnd2wfd, dz, dx, dt, tmax, nt, rho, vel, fd_coefficients)
 
 end
