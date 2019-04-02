@@ -35,33 +35,47 @@ export ModelParams,
        read_boundary,
        l2norm_snapshot,
        minus_snapshot,
-       add_snapshot
+       add_snapshot,
 # # ==================== Source =================
-#        Source,
-#        get_multi_sources,
-#        add_source!,
-#        add_multi_sources!,
-#        subtract_source!,
-#        time_range_multisources,
-# # ==================== Recordings =================
-#        Recordings,
-#        write_recordings,
-#        read_recordings,
-#        sample_spt2rec!,
-#        inject_rec2spt!,
-# # ============= forward time stepping =============
-#        one_step_forward!,
-#        one_step_backward!,
-#        multi_step_forward,
-#        multi_step_forward!,
-#        get_boundary_wavefield,
-#        pressurefield_reconstruct_forward
+       Source,
+       ricker,
+       convert2miniphase,
+       tapered_sinc,
+       scaled_sinc,
+       get_multi_sources,
+       add_source!,
+       add_multi_sources!,
+       subtract_source!,
+       time_range_multisources,
+# # ==================== Recordings ===============
+       Recordings,
+       write_recordings,
+       read_recordings,
+       sample_spt2rec!,
+       inject_rec2spt!,
+# ============= forward time stepping =============
+       A_mul_b!,
+       At_mul_b!,
+# ============= forward time stepping =============
+       one_step_forward!,
+       one_step_backward!,
+       multi_step_forward,
+       multi_step_forward!,
+       get_boundary_wavefield,
+       pressure_reconstruct_forward,
+# ============= forward time stepping =============
+       one_step_adjoint!,
+       one_step_backward,
+       multi_step_adjoint,
+       pressure_reconstruct_backward
 
 
 include("modelparams.jl")
 include("pml.jl")
 include("fdstencil.jl")
 include("snapshot.jl")
-# include("source.jl")
-# include("recordings.jl")
-# include("forward.jl")
+include("source.jl")
+include("recordings.jl")
+include("spmatvec.jl")
+include("forward.jl")
+include("adjoint.jl")

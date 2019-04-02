@@ -1,7 +1,3 @@
-using BinDeps
-
-@BinDeps.setup
-
 # set to true to support intel fortran compiler
 useIntelFortran = false
 
@@ -26,36 +22,32 @@ if !isdir(builddir)
 	 end
 end
 
+# fortran source code
+path_src = joinpath(srcdir,"spmatvec.f90")
+
+# the compiled object
+path_bin = joinpath(builddir,"spmatvec.so")
+
 # compile source code for linux machine
-@static if Sys.islinux()
-
-	path_src = joinpath(srcdir,"spmatvec.f90")
-	path_bin = joinpath(builddir,"spmatvec.so")
-
-	@build_steps begin
-		if useIntelFortran
-			 run(`ifort -O3 -xHost -fPIC -fpp -openmp -integer-size 64 -diag-disable=7841 -shared  $path_src -o $path_bin`)
-		else
-			 println("fortran version")
-			 run(`gfortran --version`)
-			 run(`gfortran -O3 -fPIC -cpp -fopenmp -fdefault-integer-8 -shared  $path_src -o $path_bin`)
-		end
-	end
+if Sys.islinux()
+	 if useIntelFortran
+			run(`ifort -O3 -xHost -fPIC -fpp -openmp -integer-size 64 -diag-disable=7841 -shared  $path_src -o $path_bin`)
+	 else
+			println("fortran version")
+			run(`gfortran --version`)
+			run(`gfortran -O3 -fPIC -cpp -fopenmp -fdefault-integer-8 -shared  $path_src -o $path_bin`)
+	 end
 end
 
 # compile source code for Mac
-@static if Sys.isapple()
-
-  path_src = joinpath(srcdir,"spmatvec.f90")
-	path_bin = joinpath(builddir,"spmatvec.so")
-
-	@build_steps begin
-		if useIntelFortran
-			 run(`ifort -O3 -xHost -fPIC -fpp -openmp -integer-size 64 -diag-disable=7841 -shared  $path_src -o $path_bin`)
-		else
-			 println("fortran version")
-			 run(`gfortran --version`)
-			 run(`gfortran -O3 -fPIC -cpp -fopenmp -fdefault-integer-8 -shared  $path_src -o $path_bin`)
-		end
-	end
+if Sys.isapple()
+	 if useIntelFortran
+			run(`ifort -O3 -xHost -fPIC -fpp -openmp -integer-size 64 -diag-disable=7841 -shared  $path_src -o $path_bin`)
+	 else
+			println("fortran version")
+			run(`gfortran --version`)
+			run(`gfortran -O3 -fPIC -cpp -fopenmp -fdefault-integer-8 -shared  $path_src -o $path_bin`)
+	 end
 end
+
+println("The fortran code is compiled successfully")

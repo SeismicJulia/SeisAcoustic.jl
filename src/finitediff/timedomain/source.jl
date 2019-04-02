@@ -109,7 +109,7 @@ end
    initialize source structure, we provide four options to specify the source wavelet
 ricker (default option), sinc, miniphase, user provided.
 """
-function Source(sz::Tv, sx::Tv, params::ModelParams; location_flag="index", ot=0.0, amp=1.0, fdom=20.0, hl=128,
+function Source(sz, sx, params::ModelParams; location_flag="index", ot=0.0, amp=1.0, fdom=20.0, hl=128,
                 type_flag="ricker", p=Vector{Float32}(undef,0)) where {Tv <: Real}
 
     # source location given index
@@ -166,8 +166,8 @@ end
 """
    get a vector of Source
 """
-function get_multi_sources(sz::Vector{Tv}, sx::Vector{Tv}, params::ModelParams; location_flag="index", ot=0.0, amp=1.0,
-                          fdom=20.0, hl=128, type_flag="ricker", p=Vector{Float32}(undef,0)) where {Tv <: Real}
+function get_multi_sources(sz::Vector, sx::Vector, params::ModelParams; location_flag="index", ot=0.0, amp=1.0,
+                          fdom=20.0, hl=128, type_flag="ricker", p=Vector{Float32}(undef,0))
 
     # number of source
     ns = length(sz)
@@ -267,7 +267,7 @@ function get_multi_sources(sz::Vector{Tv}, sx::Vector{Tv}, params::ModelParams; 
     # allocate memory for vector of sources
     srcs = Vector{Source}(undef, ns)
     for i = 1 : ns
-        srcs[i] = Source(isz[i], isx[i], params; p=wavelet[i])
+        srcs[i] = Source(isz[i], isx[i], params; p=wavelet[i], ot=ot[i])
     end
     return srcs
 end

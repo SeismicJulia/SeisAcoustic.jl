@@ -26,47 +26,67 @@ params = ModelParams(rho, vel, npml, free_surface, dz, dx, dt, tmax;
 
 # compute the sparse matrix correspinding to the FD stencil
 ofds = ObsorbFDStencil(params);
+rfds = RigidFDStencil(params);
 
-# check source related function
-isz = 2; isx = 10;
-src = Source(isz, isx, params)
-src = Source(isz, isx, params;
-      location_flag="distance", amp=4, type_flag="miniphase")
-wavelet = rand(100)
-src = Source(isz, isx, params; p=wavelet)
+# initialize a source
+# isx = collect(5:60:295); ns=length(isx); isz = 2*ones(ns);
+# ot  = 0.5*rand(ns);
+# srcs = get_multi_sources(isz, isx, params; amp=100000, ot=ot);
+src = Source(30, 1500, params; amp=100000, location_flag="distance");
 
-# multi-sources
-isz = collect(1:3);
-isx = collect(1:3);
-srcs = get_multi_sources(isz, isx, params; amp=[1,2,3], type_flag=["ricker","miniphase", "sinc"])
+# # initialize recordings
+# irx = collect(1:2:params.nx);
+# irz = 1 * ones(length(irx));
+# rec = Recordings(irz, irx, params);
 
-# add source
-spt = Snapshot(params)
-add_source!(spt, src, 50)
+# forward modeling of simultaneous sources
+# @time multi_step_forward!(rec, srcs, ofds, params);
+# @time multi_step_forward!(rec, src , ofds, params);
+# imshow(rec.p, cmap="seismic", aspect=0.1)
 
-wfd = Wavefield(params)
-add_source!(wfd, src, 50)
+# forward modeling and save the pressure field to hard drive
+path_pre = joinpath(homedir(), "Desktop/pressure.rsb");
+multi_step_forward(path_pre, src, ofds, params);
+(hdr, pre0) = read_RSdata(path_pre);
 
-spt = Snapshot(params)
-add_multi_sources!(spt, srcs, 50)
+# # save the boundary of wavefield, which can be used for reconstruction
+path_bnd = joinpath(homedir(), "Desktop/boundary.rsb")
+path_wfd = joinpath(homedir(), "Desktop/wavefield.rsb")
+get_boundary_wavefield(path_bnd, path_wfd, src, ofds, params)
 
-(tmin, tmax) = time_range_multisources(srcs)
+# read boundary and last wavefield
+bnd  = read_boundary(path_bnd);
+wfd  = read_one_wavefield(path_wfd, 1);
 
-spt1 = Snapshot(params)
-spt2 = Snapshot(params)
-tmp1 = zeros(params.data_format, params.Nz * params.Nx)
-tmp2 = zeros(params.data_format, params.Nz * params.Nx)
+# reconstruct the pressure field forward
+pre1 = pressure_reconstruct_forward(bnd, rfds, src, params);
 
-for it = 2 : 300
-
-    one_step_forward!(spt2, spt1, ofds, tmp1, tmp2)
-    add_source!(spt2, src, it)
-
-    # prepare for next iteration
-    copy_snapshot!(spt1, spt2)
-end
+# reconstruct the pressure field backward
+pre2 = pressure_reconstruct_backward(bnd, wfd, rfds, src, params);
 
 
+# test the adjoint operator
+# irx = collect(1:2:params.nx);
+# irz = 1 * ones(length(irx));
+# rec = Recordings(irz, irx, params);
+# multi_step_forward!(rec, src, ofds, params)
+#
+#
+# # the random input
+# w    = ricker(20.0, params.dt)
+# hl   = floor(Int64, length(w)/2)
+#
+# rec1 = Recordings(irz, irx, params);
+# idx_o= [1]
+# for i = 1 : rec1.nr
+#     tmp = conv(randn(params.nt)*1000, w)
+#     copyto!(rec1.p, idx_o[1], tmp, hl+1, params.nt)
+#     idx_o[1] = idx_o[1] + params.nt
+# end
+# @time p = multi_step_adjoint(rec1, ofds, src, params);
+#
+# tmp1 = dot(p, src.p)
+# tmp2 = dot(vec(rec.p), vec(rec1.p))
 
 
 
@@ -75,6 +95,4 @@ end
 
 
 
-
-# dominant frequency of source wavelet
-fdom = 10;       #Hz
+#

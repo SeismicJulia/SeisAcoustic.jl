@@ -13,8 +13,8 @@ end
 """
    constructor for recordings
 """
-function Recordings(rz::Vector{Tv}, rx::Vector{Tv},
-         params::ModelParams; location_flag="index") where {Tv <: Real}
+function Recordings(rz::Vector, rx::Vector,
+         params::ModelParams; location_flag="index")
 
     # number of receivers
     nr  = length(rz)
@@ -43,7 +43,7 @@ function Recordings(rz::Vector{Tv}, rx::Vector{Tv},
     end
 
     # error checking
-    for i = 1 : ns
+    for i = 1 : nr
         if irz[i] > params.nz || irx[i] > params.nx
            error("receiver located outside of modeling area")
         end
@@ -147,7 +147,7 @@ end
 """
    sampling one snashot to fill the recordings
 """
-function sample_spt2rec!(rec::Record, spt::Snapshot, it::Int64)
+function sample_spt2rec!(rec::Recordings, spt::Snapshot, it::Int64)
 
     # loop over receivers
     for i = 1 : rec.nr
@@ -161,7 +161,7 @@ end
 """
    the adjoint of sampling operator, inject recordings to snapshot
 """
-function inject_rec2spt!(spt::Snapshot, rec::Record, it::Int64)
+function inject_rec2spt!(spt::Snapshot, rec::Recordings, it::Int64)
 
     # loop over receivers
     for i = 1 : rec.nr

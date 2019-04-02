@@ -5,11 +5,10 @@ module SeisAcoustic
           Printf,           # formated print
           DelimitedFiles,   # delimited text file
           SparseArrays,     # finite-difference sparse matrix
-          DSP,              # smoothing kernal
-          FFTW,             # fourier transform
-          BinDeps           # manage binary dependencies
+          DSP,              # smoothing and convolution
+          FFTW              # fourier transform
 
-    # the absolute path to the binary dependency
+    # the path to the binary dependency (sparse matrix multiplication)
     const spmatveclib  = abspath(joinpath(splitdir(Base.source_path())[1],"..","deps","builds","spmatvec.so"))
 
     # overloading Base function

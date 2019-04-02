@@ -116,44 +116,6 @@ function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield, rfds::RigidFDStenci
 end
 
 """
-   one step backward reconstruction of wave field from the boundary values
-"""
-function one_step_backward!(wfd1::Wavefield, wfd2::Wavefield, rfds::RigidFDStencil, it::Ti,
-         bnd::WavefieldBound, tmp1::Vector{Tv}, tmp2::Vector{Tv}, params::ModelParams) where {Ti<:Int64, Tv<:AbstractFloat}
-
-    # wfd1.p  = wfd2.p  - ofds.MpxBvx * wfd2.vx - ofds.MpzBvz * wfd2.vz
-    # wfd1.p[bound.index]  = bound.p[:, it]
-    A_mul_b!(tmp1, rfds.MpxBvx, wfd2.vx)
-    A_mul_b!(tmp2, rfds.MpzBvz, wfd2.vz)
-    addition!(tmp1, tmp2)
-    minus!(wfd1.p, wfd2.p, tmp1)
-
-    # correct for boundary part of pressure
-    for i = 1 : length(params.bnd2wfd)
-        j = params.bnd2wfd[i]
-        wfd1.p[j] = bnd.p[i,it]
-    end
-
-    # wfd1.vx = wfd2.vx - ofds.MvxBp  * wfd1.p
-    # wfd1.vz = wfd2.vz - ofds.MvzBp  * wfd1.p
-    # wfd1.vx[bound.index] = bound.vx[:, it]
-    # wfd1.vz[bound.index] = bound.vz[:, it]
-    A_mul_b!(tmp1, ofds.MvxBp, wfd1.p)
-    A_mul_b!(tmp2, ofds.MvzBp, wfd1.p)
-    minus!(wfd1.vx, wfd2.vx, tmp1)
-    minus!(wfd1.vz, wfd2.vz, tmp2)
-
-    # correct for boundary part of particle velocity
-    for i = 1 : length(params.bnd2wfd)
-        j = params.bnd2wfd[i]
-        wfd1.vz[j] = bnd.vz[i,it]
-        wfd1.vx[j] = bnd.vx[i,it]
-    end
-
-    return nothing
-end
-
-"""
 save snapshot or full wave field or pressure field to hard drive, inject single source
 save_type="snapshot" : vz, vx, pz, px include PML part,
 save_type="wavefield": vz, vx, pz+px  without PML part,
@@ -173,19 +135,19 @@ function multi_step_forward(path::String, src::Source, ofds::ObsorbFDStencil,
 
     # save snapshot
     if save_type == "snapshot"
-       hdr = snapshot_header(par)
+       hdr = snapshot_header(params)
        fid = write_RSheader(path, hdr)
        append_one_snapshot(fid, spt1)
 
     # save wavefield
     elseif save_type == "wavefield"
-       hdr = wavefield_header(par)
+       hdr = wavefield_header(params)
        fid = write_RSheader(path, hdr)
        append_one_wavefield(fid, spt1, params)
 
     # save pressure
     elseif save_type == "pressure"
-       hdr = pressure_header(par)
+       hdr = pressure_header(params)
        fid = write_RSheader(path, hdr)
        append_one_pressure(fid, spt1, params)
     else
@@ -209,53 +171,6 @@ function multi_step_forward(path::String, src::Source, ofds::ObsorbFDStencil,
     end
 
     close(fid)
-    return nothing
-end
-
-"""
-   compute wavefield boundary at each time step and the wavefield at last time step
-save them to hard drive.
-"""
-function get_boundary_wavefield(path_wfd::String, path_bnd::String,
-         src::Source, ofds::ObsorbFDStencil, params::ModelParams)
-
-    # one extra time step
-    nt = par.nt + 1
-
-    # initialize variables for time stepping
-    spt1 = Snapshot(params)
-    spt2 = Snapshot(params)
-    tmp1 = zeros(params.data_format, params.Nz * params.Nx)
-    tmp2 = zeros(params.data_format, params.Nz * params.Nx)
-
-    # add source to the first snapshot
-    add_source!(spt1, src, 1)
-
-    # save the boundary of the first wavefield
-    hdr = boundary_header(params)
-    fid = write_RSheader(path_bnd, hdr)
-    append_one_boundary(fid, spt1, params)
-
-    # loop over time stepping
-    for it = 2 : nt
-
-        one_step_forward!(spt2, spt1, ofds, tmp1, tmp2)
-        add_source!(spt2, src, it)
-
-        # save boundary of wavefield
-        append_one_boundary(fid, spt2, params)
-
-        # prepare for next iteration
-        copy_snapshot!(spt1, spt2)
-    end
-
-    # finish saving all the boundary values, close the file
-    close(fid)
-
-    # save the wavefield at the final time step
-    wfd = sample_spt2wfd(spt1, params)
-    write_wavefield(path_wfd, wfd)
-
     return nothing
 end
 
@@ -325,10 +240,57 @@ function multi_step_forward!(rec::Recordings, srcs::Vector{Source},
 end
 
 """
+   compute wavefield boundary at each time step and the wavefield at last time step
+save them to hard drive.
+"""
+function get_boundary_wavefield(path_bnd::String, path_wfd::String,
+         src::Source, ofds::ObsorbFDStencil, params::ModelParams)
+
+    # one extra time step
+    nt = params.nt + 1
+
+    # initialize variables for time stepping
+    spt1 = Snapshot(params)
+    spt2 = Snapshot(params)
+    tmp1 = zeros(params.data_format, params.Nz * params.Nx)
+    tmp2 = zeros(params.data_format, params.Nz * params.Nx)
+
+    # add source to the first snapshot
+    add_source!(spt1, src, 1)
+
+    # save the boundary of the first wavefield
+    hdr = boundary_header(params)
+    fid = write_RSheader(path_bnd, hdr)
+    append_one_boundary(fid, spt1, params)
+
+    # loop over time stepping
+    for it = 2 : nt
+
+        one_step_forward!(spt2, spt1, ofds, tmp1, tmp2)
+        add_source!(spt2, src, it)
+
+        # save boundary of wavefield
+        append_one_boundary(fid, spt2, params)
+
+        # prepare for next iteration
+        copy_snapshot!(spt1, spt2)
+    end
+
+    # finish saving all the boundary values, close the file
+    close(fid)
+
+    # save the wavefield at the final time step
+    wfd = sample_spt2wfd(spt1, params)
+    write_wavefield(path_wfd, wfd, params)
+
+    return nothing
+end
+
+"""
    Forward reconstruct acoustic pressure field using the saved boundary wavefield value and
 the source (used for concept proofing)
 """
-function pressurefield_reconstruct_forward(bnd::WavefieldBound, rfds::RigidFDStencil,
+function pressure_reconstruct_forward(bnd::WavefieldBound, rfds::RigidFDStencil,
          src::Source, params::ModelParams)
 
     # length of one-step pressure field
@@ -344,7 +306,7 @@ function pressurefield_reconstruct_forward(bnd::WavefieldBound, rfds::RigidFDSte
     tmp2 = zeros(params.data_format, N)
 
     # allocate memory for saving pressure field
-    pre = zeros(par.data_format, N * params.nt)
+    pre = zeros(params.data_format, N * params.nt)
 
     # add source to the first wavefield
     add_source!(wfd1, src, 1)
@@ -362,13 +324,13 @@ function pressurefield_reconstruct_forward(bnd::WavefieldBound, rfds::RigidFDSte
         one_step_forward!(wfd2, wfd1, rfds, it, bnd, tmp1, tmp2, params)
 
         # add source to wavefield
-        if order+1 <= src.isz <= par.nz-order && order+1 <= src.isx <= par.nx-order
+        if order+1 <= src.isz <= params.nz-order && order+1 <= src.isx <= params.nx-order
            add_source!(wfd2, src, it)
         end
 
         # save the pressure field
         copyto!(pre, idx_o, wfd2.p, 1, N)
-        idx_o = idx_o + 1
+        idx_o = idx_o + N
 
         # prepare for next step
         copy_wavefield!(wfd1, wfd2)

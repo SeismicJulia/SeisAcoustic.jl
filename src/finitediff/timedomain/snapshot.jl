@@ -175,15 +175,16 @@ end
 """
    save the wavefield at the last time step in a independent file
 """
-function write_wavefield(path::String, wfd::Wavefield)
+function write_wavefield(path::String, wfd::Wavefield, params::ModelParams)
 
     # length of wavefield
-    n1 = length(wfd.vz)
+    n1 = params.nz
+    n2 = params.nx
     data_format = eltype(wfd.vz)
 
-    hdr = RegularSampleHeader(n1=n1, n2=3,
-                              o1=1 , o2=1,
-                              d1=1 , d2=1,
+    hdr = RegularSampleHeader(n1=n1, n2=n2, n3=3,
+                              o1=1 , o2=1 , o3=1,
+                              d1=1 , d2=1 , d3=1,
                               label1="wavefield value", label2="component",
                               title="last wavefield", data_format=data_format)
 
