@@ -315,7 +315,7 @@ end
    Constructor of WavefieldBound, it provide two options, 1: include all time steps, 2: just one time step.
 by setting the keyword argument flag=1 or flag=2.
 """
-function WavefieldBound(params::ModelParams; flag=1)
+function WavefieldBound(params::ModelParams; step_flag=1)
 
     # length of boundary elements for one time step
     N = length(params.spt2bnd)
@@ -325,13 +325,14 @@ function WavefieldBound(params::ModelParams; flag=1)
 
     # initialize empty struct
     if flag == 1
-       return WavefieldBound(zeros(params.data_format, N, nt),
-                             zeros(params.data_format, N, nt),
-                             zeros(params.data_format, N, nt))
-    elseif flag == 2
        return WavefieldBound(zeros(params.data_format, N),
                              zeros(params.data_format, N),
                              zeros(params.data_format, N))
+
+    elseif flag == 2
+       return WavefieldBound(zeros(params.data_format, N, nt),
+                             zeros(params.data_format, N, nt),
+                             zeros(params.data_format, N, nt))
     else
        error("non-supported flag, set flag=1 include all time steps, flag=2 just one time step")
     end

@@ -15,7 +15,7 @@ end
 """
    create a ricker wavelet
 """
-function ricker(fdoms, dt)
+function ricker(fdom, dt)
 
  	  nw = 2.2 / fdom / dt         # decide number of samples
 	  nw = 2*floor(Int64, nw/2)+1  # gaurantee the number of samples is odd
@@ -114,8 +114,8 @@ function Source(sz::Tv, sx::Tv, params::ModelParams; location_flag="index", ot=0
 
     # source location given index
     if location_flag == "index"
-       isz = round(Int64, isz)
-       isx = round(Int64, isx)
+       isz = round(Int64, sz)
+       isx = round(Int64, sx)
 
     # source location given as distance
     elseif location_flag == "distance"
@@ -126,24 +126,24 @@ function Source(sz::Tv, sx::Tv, params::ModelParams; location_flag="index", ot=0
     end
 
     # error checking
-    if isz > params.nz || isx[i] > params.nx
+    if isz > params.nz || isx > params.nx
        error("source located outside of modeling area")
     end
 
     # the auxillary index mapping the location of source to snapshot or wavefield
-    src2spt = (isx+params.npml-1)*par.Nz + isz + params.ntop
-    src2wfd = (isx-1) * params.nz + isz
+    src2spt = (isx+params.npml-1) * params.Nz + isz + params.ntop
+    src2wfd = (isx            -1) * params.nz + isz
 
     # non-user provided source wavelet
     if length(p) == 0
        if type_flag == "ricker"
           p = ricker(fdom, params.dt)
           p = amp * p
-       elseif flag_type == "miniphase"
+       elseif type_flag == "miniphase"
           p = ricker(fdom, params.dt)
           p = convert2miniphase(p)
           p = amp * p
-       elseif flag_type == "sinc"
+       elseif type_flag == "sinc"
           fc = params.data_format(fdom)
           hl = round(Int64, hl)
           p  = tapered_sinc(fc, hl, params.dt)
@@ -153,6 +153,7 @@ function Source(sz::Tv, sx::Tv, params::ModelParams; location_flag="index", ot=0
 
     # make the data type consistent
     p = convert(Vector{params.data_format}, p)
+    nt= length(p)
 
     # the index time range of source wavelet
     it_min = floor(Int64, ot/params.dt) + 1
@@ -166,7 +167,7 @@ end
    get a vector of Source
 """
 function get_multi_sources(sz::Vector{Tv}, sx::Vector{Tv}, params::ModelParams; location_flag="index", ot=0.0, amp=1.0,
-                          fdom=20.0, hl=128, type_flag="ricker", p=Vector{Float32}(undef,0)) where {Ti <: Real}
+                          fdom=20.0, hl=128, type_flag="ricker", p=Vector{Float32}(undef,0)) where {Tv <: Real}
 
     # number of source
     ns = length(sz)
@@ -179,8 +180,8 @@ function get_multi_sources(sz::Vector{Tv}, sx::Vector{Tv}, params::ModelParams; 
     isx = zeros(Int64, ns)
     if location_flag == "index"
        for i = 1 : ns
-           isz[i] = round(Int64, isz[i])
-           isx[i] = round(Int64, isx[i])
+           isz[i] = round(Int64, sz[i])
+           isx[i] = round(Int64, sx[i])
        end
 
     # source location given as distance
@@ -234,18 +235,18 @@ function get_multi_sources(sz::Vector{Tv}, sx::Vector{Tv}, params::ModelParams; 
        end
 
        # generate the specific source wavelet
-       wavelet = Vector{Vector{params.data_format}}(ns)
+       wavelet = Vector{Vector{params.data_format}}(undef, ns)
        for i = 1 : ns
            if type_flag[i] == "ricker"
               tmp = amp[i] * ricker(fdom[i], params.dt)
               wavelet[i] = convert(Vector{params.data_format}, tmp)
-           elseif flag_type[i] == "miniphase"
+           elseif type_flag[i] == "miniphase"
               tmp = ricker(fdom[i], params.dt)
               tmp = amp[i] * convert2miniphase(tmp)
               wavelet[i] = convert(Vector{params.data_format}, tmp)
-           elseif flag_type[i] == "sinc"
+           elseif type_flag[i] == "sinc"
               hl   = round(Int64, hl)
-              tmp  = amp[i] * truncated_sinc(fdom, hl, params.dt)
+              tmp  = amp[i] * tapered_sinc(fdom[i], hl, params.dt)
               wavelet[i] = convert(Vector{params.data_format}, tmp)
            end
        end
@@ -297,9 +298,9 @@ function add_source!(wfd::Wavefield, src::Source, it::Int64)
     if src.it_min <= it <= src.it_max
 
        idx_t = it - src.it_min + 1
-       idx_p = src.src2spt
+       idx_p = src.src2wfd
 
-       wfd.p[idx_p] = wfd.p[idx_p] + src.p[ind_t] * src.dt
+       wfd.p[idx_p] = wfd.p[idx_p] + src.p[idx_t] * src.dt
     end
     return nothing
 end
@@ -326,14 +327,12 @@ function subtract_source!(wfd::Wavefield, src::Source, it::Int64)
 
     if src.it_min <= it <= src.it_max
        idx_t = it - src.it_min + 1
-       idx_p = src.src2spt
+       idx_p = src.src2wfd
 
        wfd.p[idx_p] = wfd.p[idx_p] - src.p[idx_t] * src.dt
     end
     return nothing
 end
-
-
 
 """
    find the time range of multiple sources

@@ -30,7 +30,7 @@ end
 @static if Sys.islinux()
 
 	path_src = joinpath(srcdir,"spmatvec.f90")
-	path_bin = joinpath(builddir,"spmatvec")
+	path_bin = joinpath(builddir,"spmatvec.so")
 
 	@build_steps begin
 		if useIntelFortran
@@ -47,7 +47,7 @@ end
 @static if Sys.isapple()
 
   path_src = joinpath(srcdir,"spmatvec.f90")
-	path_bin = joinpath(builddir,"spmatvec")
+	path_bin = joinpath(builddir,"spmatvec.so")
 
 	@build_steps begin
 		if useIntelFortran

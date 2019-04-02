@@ -10,7 +10,7 @@ module SeisAcoustic
           BinDeps           # manage binary dependencies
 
     # the absolute path to the binary dependency
-    const spmatveclib  = abspath(joinpath(splitdir(Base.source_path())[1],"..","deps","builds","spmatvec"))
+    const spmatveclib  = abspath(joinpath(splitdir(Base.source_path())[1],"..","deps","builds","spmatvec.so"))
 
     # overloading Base function
     import Base.convert, Base.show

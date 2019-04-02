@@ -315,10 +315,7 @@ end
    the constructor for ModelParams
 """
 function ModelParams(rho, vel, npml::Ti, free_surface::Bool, dz, dx, dt, tmax;
-         data_format=Float32, order=2, fd_flag="taylor") where {Ti<:Int64}
-
-    # test the stable condition
-    is_stable(vel, dz, dx, dt)
+         data_format=Float32, fd_flag="taylor", order=2) where {Ti<:Int64}
 
     # get the size of the model
     (nz, nx) = size(rho)
@@ -334,6 +331,9 @@ function ModelParams(rho, vel, npml::Ti, free_surface::Bool, dz, dx, dt, tmax;
     dt  = convert(data_format, dt)
     tmax= convert(data_format, tmax)
 
+    # test the stable condition
+    is_stable(vel, dz, dx, dt)
+    
     # compute finite difference coefficients
     if fd_flag == "taylor"
        fd_coefficients = finite_difference_coefficients(order)

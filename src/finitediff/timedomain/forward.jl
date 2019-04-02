@@ -74,7 +74,7 @@ function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, ofds::ObsorbF
     addition!(spt2.pz, tmp1)                        # pz2 = pz2    + tmp1
 
     # update px
-    multiplication!(spt2.px, ofds.MpxBpx, spt1.px)  # pzx = MpxBpx * px1
+    multiplication!(spt2.px, ofds.MpxBpx, spt1.px)  # px2 = MpxBpx * px1
     A_mul_b!(tmp1, ofds.MpxBvx, spt2.vx)            # tmp1= MpxBvx * vx2
     addition!(spt2.px, tmp1)                        # px2 = px2    + tmp1
 
