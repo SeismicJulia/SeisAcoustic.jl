@@ -1,4 +1,4 @@
-using SeisAcoustic
+using SeisAcoustic, DSP, LinearAlgebra
 
 # velocity and density model
 vel = 3000 * ones(100, 300);  # m/s
@@ -22,22 +22,20 @@ params = ModelParams(rho, vel, npml, free_surface, dz, dx, dt, tmax;
 
 # compute the sparse matrix correspinding to the FD stencil
 ofds = ObsorbFDStencil(params);
-rfds = RigidFDStencil(params);
 
 # source function
 src = Source(30, 1500, params; amp=100000, location_flag="distance");
 
 # compute source side wavefield
 dpdt= get_sourceside_wavefield(src, ofds, params);
-imshow(dpdt[:,:,500]);
 dpdt= reshape(dpdt, params.nz*params.nx, params.nt);
 
-# forward born approximation
-delta_lambda = zeros(params.data_format, params.nz*params.nx);
-
-# put a single scatter in the middle of the model
-iz = 50; ix=150; idx = (ix-1)*params.nz + iz;
-delta_lambda[idx] = 1.0;
+# # forward born approximation
+# delta_lambda = zeros(params.data_format, params.nz*params.nx);
+#
+# # put a single scatter in the middle of the model
+# iz = 50; ix=150; idx = (ix-1)*params.nz + iz;
+# delta_lambda[idx] = 1.0;
 
 # pre-allocate recordings for scatter wavefield
 irx = collect(1:2:params.nx);
@@ -45,9 +43,11 @@ irz = 2 * ones(length(irx));
 rec = Recordings(irz, irx, params);
 
 # forward modelling
-born_approximation_forward!(rec, dpdt, delta_lambda, ofds, params);
-gradient = born_approximation_adjoint(rec, dpdt, ofds, params);
-gradient = reshape(gradient, params.nz, params.nx);
+# delta_lambda = randn(params.data_format, params.nz*params.nx);
+# born_approximation_forward!(rec, dpdt, delta_lambda, ofds, params);
+
+# gradient = born_approximation_adjoint(rec, dpdt, ofds, params);
+# gradient = reshape(gradient, params.nz, params.nx);
 
 # dot_product test for born approximation
 delta_lambda = randn(params.data_format, params.nz*params.nx);

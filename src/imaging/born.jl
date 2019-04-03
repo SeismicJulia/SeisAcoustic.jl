@@ -19,6 +19,30 @@ function compute_dpdt!(dpdt::Matrix{Tv}, spt1::Snapshot, spt2::Snapshot,
 end
 
 """
+   compute the time derivative of source-side wavefield at current time step via central
+finite difference.
+"""
+function compute_one_dpdt!(dpdt::Vector{Tv}, spt1::Snapshot, spt2::Snapshot,
+         mp::Vector{Tv}, params::ModelParams) where {Tv<:AbstractFloat}
+
+    N = params.nz * params.nx
+    one_over_2dt = params.data_format(1.0 / (2.0 * params.dt))
+
+    for i = 1 : N
+
+        # mapping spt to pressure
+        j = params.spt2wfd[i]
+
+        # central finite difference
+        dpdt[i] = (spt2.pz[j]+spt2.px[j]-mp[i]) * one_over_2dt
+
+        # update memory variable
+        mp[i] = spt1.pz[j] + spt1.px[j]
+    end
+    return nothing
+end
+
+"""
    compute the source-side wavefield dpdt, time derivative is approximated by central finite-difference.
 """
 function get_sourceside_wavefield(src::Source, ofds::ObsorbFDStencil, params::ModelParams)
@@ -121,61 +145,62 @@ function born_approximation_forward!(rec::Recordings, dpdt::Matrix{Tv}, delta_la
     return rec
 end
 
-function get_time_derivative!(dpdt::Vector{Tv}, p::Vector{Tv}, mp::Vector{Tv}, one_over_two::Tv) where {Tv<:AbstractFloat}
-
-    n = length(dpdt)
-    for i = 1 : n
-        dpdt[i] = (p[i]-mp[i]) * one_over_two
-    end
-end
-
 """
    forward Born approximation with source-side wavefield reconstruction are computed on the flight
 """
-function born_approximation_forward(rec::Recordings, delta_lambda::Vector{Tv}, ofds::ObsorbFDStencil,
-         src::Source, path_bnd::String, rfds::RigidFDStencil, params::ModelParams) where{Tv<:AbstractFloat}
+function born_approximation_forward!(rec::Recordings, delta_lambda::Vector{Tv}, src::Source,
+         ofds::ObsorbFDStencil, params::ModelParams) where{Tv<:AbstractFloat}
 
     # length of model
     N = params.nz * params.nx
 
-    # constant used for computing the time derivative of source-side wavefield
-    const one_over_two = par.data_format(0.5)
-
-    # intermediate variables time stepping
+    # intermediate variables born forward time stepping
     spt1 = Snapshot(params)
     spt2 = Snapshot(params)
     tmp1 = zeros(params.data_format, params.Nz * params.Nx)
     tmp2 = zeros(params.data_format, params.Nz * params.Nx)
 
-    # temporary variables for source-side wavefield reconstruction
-    wfd1 = Wavefield(par)
-    wfd2 = Wavefield(par)
-    tmp3 = zeros(params.data_format, N)
-    tmp4 = zeros(params.data_format, N)
+    # intermediate variables for computing source side wavefield
+    spt_s1 = Snapshot(params)
+    spt_s2 = Snapshot(params)
 
     # memory variable to save the pressure field at previous time step
+    dpdt = zeros(params.data_format, N)
     mp   = zeros(params.data_format, N)
+    cube = zeros(params.data_format, N, params.nt)
+    idx_o= 1
 
     # add source to wavefield to get the first pressure field
-    add_source!(wfd1, src, 1)
+    add_source!(spt_s1, src, 1)
 
-    for it = 1 : par.nt
+    for it = 1 : params.nt
 
-        one_step_forward!(wfd2, wfd1, fidMtxT, it+1, bnd, tmp3, tmp4, par)
-        correct_wavefield!(wfd2, src, it+1, par)
-        get_time_derivative!(tmp3, wfd2.p, mp, one_over_two)
+        # compute the source side wavefield (it+1)
+        one_step_forward!(spt_s2, spt_s1, ofds, tmp1, tmp2)
+        add_source!(spt_s2, src, it+1)
 
-        add_virtual_source!(spt1, tmp3, delta_lambda, par)
-        sample_spt2record!(rec, spt1, it)
+        # compute dpdt at it
+        compute_one_dpdt!(dpdt, spt_s1, spt_s2, mp, params)
+        copyto!(cube, idx_o, dpdt, 1, N);
+        idx_o = idx_o+N
 
-        Base.LinAlg.BLAS.blascopy!(n, wfd1.p, 1, mp, 1)
-        copy_wavefield!(wfd1, wfd2)
+        # add virtual source
+        add_virtual_source!(spt1, dpdt, delta_lambda, params)
 
-        one_step_forward!(spt2, spt1, fidMtx, tmp1, tmp2)
+        # sample the scattered wave field at it
+        sample_spt2rec!(rec, spt1, it)
+
+        # prepare for source-side wavefield at (it+2)
+        copy_snapshot!(spt_s2, spt_s1)
+
+        # the scattered wavefield at it+1 without adding virtual source
+        one_step_forward!(spt2, spt1, ofds, tmp1, tmp2)
+
+        # prepare for adding virtual source at it+1
         copy_snapshot!(spt1, spt2)
     end
 
-    return rec
+    return cube
 end
 
 """
@@ -244,150 +269,150 @@ function born_approximation_adjoint(rec::Recordings, dpdt::Matrix{Tv},
     return delta_lambda
 end
 
-function born_approximation_adjoint(rec::Record, fidMtx::FiniteDiffMatrix, src::Source,
-         bnd::WavefieldBound, wfd::Wavefield, fidMtxT::RigidFiniteDiffMatrix, par::PhysicalModel)
-
-    N = par.nz * par.nx
-    const one_over_two = par.data_format(0.5)
-    delta_lambda = zeros(par.data_format, N)
-
-    spt1 = Snapshot(par)
-    spt2 = Snapshot(par)
-    tmp1 = zeros(spt1.vz)
-    tmp2 = zeros(spt1.vx)
-
-    wfd1 = Wavefield(par)
-    wfd2 = Wavefield(par)
-    tmp3 = zeros(wfd1.p)
-    tmp4 = zeros(wfd1.p)
-    mp   = copy(wfd.p)
-
-    inject_record2spt!(spt2, rec, par.nt)
-    one_step_backward!(wfd2, wfd , fidMtxT, par.nt  , bnd, tmp3, tmp4, par)
-    one_step_backward!(wfd1, wfd2, fidMtxT, par.nt-1, bnd, tmp3, tmp4, par)
-    get_time_derivative!(tmp3, mp, wfd1.p, one_over_two)
-    apply_image_condition!(delta_lambda, spt2, tmp3, par)
-
-    for it = par.nt-1 : -1 : 2
-
-        # backward propagation of recordings
-        one_step_adjoint!(spt1, spt2, fidMtx, tmp1, tmp2)
-        inject_record2spt!(spt1, rec, it)
-
-        # update memory variable
-        Base.LinAlg.BLAS.blascopy!(N, wfd2.p, 1, mp, 1)
-        if it <= src.nt-1
-           mp[src.idx2] = mp[src.idx2] + src.p[it+1]*par.dt
-        end
-
-        # reconstruct of source-side wavefield
-        copy_wavefield!(wfd2, wfd1)
-        if it <= src.nt
-           wfd2.p[src.idx2] = wfd2.p[src.idx2] - src.p[it]*par.dt
-        end
-        one_step_backward!(wfd1, wfd2, fidMtxT, it-1, bnd, tmp3, tmp4, par)
-
-        # apply imaging condition
-        get_time_derivative!(tmp3, mp, wfd1.p, one_over_two)
-        apply_image_condition!(delta_lambda, spt1, tmp3, par)
-
-        copy_snapshot!(spt2, spt1)
-    end
-
-    # the last one
-    one_step_adjoint!(spt1, spt2, fidMtx, tmp1, tmp2)
-    inject_record2spt!(spt1, rec, 1)
-
-    wfd2.p[src.idx2] = wfd2.p[src.idx2] + src.p[2] * par.dt
-    for i = 1 : N
-        j = par.index1[i]
-        delta_lambda[i] = delta_lambda[i] + spt1.pz[j] * wfd2.p[i] * one_over_two
-    end
-
-    return delta_lambda
-end
-
-# one shot reverse time migration
-function single_shot_RTM(rec::Record, fidMtx::FiniteDiffMatrix, src::Source,
-         bnd::WavefieldBound, wfd::Wavefield, fidMtxT::RigidFiniteDiffMatrix, par::PhysicalModel)
-
-    N = par.nz * par.nx
-    const one_over_two = par.data_format(0.5)
-    delta_lambda = zeros(par.data_format, N)
-    src_side     = zeros(par.data_format, N)
-    rec_side     = zeros(par.data_format, N)
-
-    spt1 = Snapshot(par)
-    spt2 = Snapshot(par)
-    tmp1 = zeros(spt1.vz)
-    tmp2 = zeros(spt1.vx)
-
-    wfd1 = Wavefield(par)
-    wfd2 = Wavefield(par)
-    tmp3 = zeros(wfd1.p)
-    tmp4 = zeros(wfd1.p)
-    mp   = copy(wfd.p)
-
-    inject_record2spt!(spt2, rec, par.nt)
-    one_step_backward!(wfd2, wfd , fidMtxT, par.nt  , bnd, tmp3, tmp4, par)
-    one_step_backward!(wfd1, wfd2, fidMtxT, par.nt-1, bnd, tmp3, tmp4, par)
-    get_time_derivative!(tmp3, mp, wfd1.p, one_over_two)
-    apply_normalized_image_condition!(delta_lambda, src_side, rec_side, spt2, tmp3, par)
-
-    for it = par.nt-1 : -1 : 2
-
-        # backward propagation of recordings
-        one_step_adjoint!(spt1, spt2, fidMtx, tmp1, tmp2)
-        inject_record2spt!(spt1, rec, it)
-
-        # update memory variable
-        Base.LinAlg.BLAS.blascopy!(N, wfd2.p, 1, mp, 1)
-        if it <= src.nt-1
-           mp[src.idx2] = mp[src.idx2] + src.p[it+1]*par.dt
-        end
-
-        # reconstruct of source-side wavefield
-        copy_wavefield!(wfd2, wfd1)
-        if it <= src.nt
-           wfd2.p[src.idx2] = wfd2.p[src.idx2] - src.p[it]*par.dt
-        end
-        one_step_backward!(wfd1, wfd2, fidMtxT, it-1, bnd, tmp3, tmp4, par)
-
-        # apply imaging condition
-        get_time_derivative!(tmp3, mp, wfd1.p, one_over_two)
-        apply_normalized_image_condition!(delta_lambda, src_side, rec_side, spt1, tmp3, par)
-
-        copy_snapshot!(spt2, spt1)
-    end
-
-    # the last one
-    one_step_adjoint!(spt1, spt2, fidMtx, tmp1, tmp2)
-    inject_record2spt!(spt1, rec, 1)
-
-    wfd2.p[src.idx2] = wfd2.p[src.idx2] + src.p[2] * par.dt
-    for i = 1 : N
-        j = par.index1[i]
-        delta_lambda[i] = delta_lambda[i] + spt1.pz[j] * wfd2.p[i] * one_over_two
-        src_side[i]     = src_side[i] + (wfd2.p[i] * one_over_two)^2
-        rec_side[i]     = rec_side[i] + (spt1.pz[i])^2
-    end
-
-    return delta_lambda, src_side, rec_side
-end
-
-"""
-   correct the wavefield by source
-"""
-function correct_wavefield!(wfd::Wavefield, src::Source, it::Int64, par::PhysicalModel)
-
-    tc = (it-1) * src.dt
-    if src.ot <= tc <= src.tmax && par.order+1 <= src.isz <= par.nz-par.order && par.order+1 <= src.isx <= par.nx-par.order
-       indt = it - round(Int64, src.ot / src.dt)
-       pos  = src.idx2
-       wfd.p[pos] = wfd.p[pos] + src.p[indt] * src.dt
-    end
-    return nothing
-end
+# function born_approximation_adjoint(rec::Record, fidMtx::FiniteDiffMatrix, src::Source,
+#          bnd::WavefieldBound, wfd::Wavefield, fidMtxT::RigidFiniteDiffMatrix, par::PhysicalModel)
+#
+#     N = par.nz * par.nx
+#     const one_over_two = par.data_format(0.5)
+#     delta_lambda = zeros(par.data_format, N)
+#
+#     spt1 = Snapshot(par)
+#     spt2 = Snapshot(par)
+#     tmp1 = zeros(spt1.vz)
+#     tmp2 = zeros(spt1.vx)
+#
+#     wfd1 = Wavefield(par)
+#     wfd2 = Wavefield(par)
+#     tmp3 = zeros(wfd1.p)
+#     tmp4 = zeros(wfd1.p)
+#     mp   = copy(wfd.p)
+#
+#     inject_record2spt!(spt2, rec, par.nt)
+#     one_step_backward!(wfd2, wfd , fidMtxT, par.nt  , bnd, tmp3, tmp4, par)
+#     one_step_backward!(wfd1, wfd2, fidMtxT, par.nt-1, bnd, tmp3, tmp4, par)
+#     get_time_derivative!(tmp3, mp, wfd1.p, one_over_two)
+#     apply_image_condition!(delta_lambda, spt2, tmp3, par)
+#
+#     for it = par.nt-1 : -1 : 2
+#
+#         # backward propagation of recordings
+#         one_step_adjoint!(spt1, spt2, fidMtx, tmp1, tmp2)
+#         inject_record2spt!(spt1, rec, it)
+#
+#         # update memory variable
+#         Base.LinAlg.BLAS.blascopy!(N, wfd2.p, 1, mp, 1)
+#         if it <= src.nt-1
+#            mp[src.idx2] = mp[src.idx2] + src.p[it+1]*par.dt
+#         end
+#
+#         # reconstruct of source-side wavefield
+#         copy_wavefield!(wfd2, wfd1)
+#         if it <= src.nt
+#            wfd2.p[src.idx2] = wfd2.p[src.idx2] - src.p[it]*par.dt
+#         end
+#         one_step_backward!(wfd1, wfd2, fidMtxT, it-1, bnd, tmp3, tmp4, par)
+#
+#         # apply imaging condition
+#         get_time_derivative!(tmp3, mp, wfd1.p, one_over_two)
+#         apply_image_condition!(delta_lambda, spt1, tmp3, par)
+#
+#         copy_snapshot!(spt2, spt1)
+#     end
+#
+#     # the last one
+#     one_step_adjoint!(spt1, spt2, fidMtx, tmp1, tmp2)
+#     inject_record2spt!(spt1, rec, 1)
+#
+#     wfd2.p[src.idx2] = wfd2.p[src.idx2] + src.p[2] * par.dt
+#     for i = 1 : N
+#         j = par.index1[i]
+#         delta_lambda[i] = delta_lambda[i] + spt1.pz[j] * wfd2.p[i] * one_over_two
+#     end
+#
+#     return delta_lambda
+# end
+#
+# # one shot reverse time migration
+# function single_shot_RTM(rec::Record, fidMtx::FiniteDiffMatrix, src::Source,
+#          bnd::WavefieldBound, wfd::Wavefield, fidMtxT::RigidFiniteDiffMatrix, par::PhysicalModel)
+#
+#     N = par.nz * par.nx
+#     const one_over_two = par.data_format(0.5)
+#     delta_lambda = zeros(par.data_format, N)
+#     src_side     = zeros(par.data_format, N)
+#     rec_side     = zeros(par.data_format, N)
+#
+#     spt1 = Snapshot(par)
+#     spt2 = Snapshot(par)
+#     tmp1 = zeros(spt1.vz)
+#     tmp2 = zeros(spt1.vx)
+#
+#     wfd1 = Wavefield(par)
+#     wfd2 = Wavefield(par)
+#     tmp3 = zeros(wfd1.p)
+#     tmp4 = zeros(wfd1.p)
+#     mp   = copy(wfd.p)
+#
+#     inject_record2spt!(spt2, rec, par.nt)
+#     one_step_backward!(wfd2, wfd , fidMtxT, par.nt  , bnd, tmp3, tmp4, par)
+#     one_step_backward!(wfd1, wfd2, fidMtxT, par.nt-1, bnd, tmp3, tmp4, par)
+#     get_time_derivative!(tmp3, mp, wfd1.p, one_over_two)
+#     apply_normalized_image_condition!(delta_lambda, src_side, rec_side, spt2, tmp3, par)
+#
+#     for it = par.nt-1 : -1 : 2
+#
+#         # backward propagation of recordings
+#         one_step_adjoint!(spt1, spt2, fidMtx, tmp1, tmp2)
+#         inject_record2spt!(spt1, rec, it)
+#
+#         # update memory variable
+#         Base.LinAlg.BLAS.blascopy!(N, wfd2.p, 1, mp, 1)
+#         if it <= src.nt-1
+#            mp[src.idx2] = mp[src.idx2] + src.p[it+1]*par.dt
+#         end
+#
+#         # reconstruct of source-side wavefield
+#         copy_wavefield!(wfd2, wfd1)
+#         if it <= src.nt
+#            wfd2.p[src.idx2] = wfd2.p[src.idx2] - src.p[it]*par.dt
+#         end
+#         one_step_backward!(wfd1, wfd2, fidMtxT, it-1, bnd, tmp3, tmp4, par)
+#
+#         # apply imaging condition
+#         get_time_derivative!(tmp3, mp, wfd1.p, one_over_two)
+#         apply_normalized_image_condition!(delta_lambda, src_side, rec_side, spt1, tmp3, par)
+#
+#         copy_snapshot!(spt2, spt1)
+#     end
+#
+#     # the last one
+#     one_step_adjoint!(spt1, spt2, fidMtx, tmp1, tmp2)
+#     inject_record2spt!(spt1, rec, 1)
+#
+#     wfd2.p[src.idx2] = wfd2.p[src.idx2] + src.p[2] * par.dt
+#     for i = 1 : N
+#         j = par.index1[i]
+#         delta_lambda[i] = delta_lambda[i] + spt1.pz[j] * wfd2.p[i] * one_over_two
+#         src_side[i]     = src_side[i] + (wfd2.p[i] * one_over_two)^2
+#         rec_side[i]     = rec_side[i] + (spt1.pz[i])^2
+#     end
+#
+#     return delta_lambda, src_side, rec_side
+# end
+#
+# """
+#    correct the wavefield by source
+# """
+# function correct_wavefield!(wfd::Wavefield, src::Source, it::Int64, par::PhysicalModel)
+#
+#     tc = (it-1) * src.dt
+#     if src.ot <= tc <= src.tmax && par.order+1 <= src.isz <= par.nz-par.order && par.order+1 <= src.isx <= par.nx-par.order
+#        indt = it - round(Int64, src.ot / src.dt)
+#        pos  = src.idx2
+#        wfd.p[pos] = wfd.p[pos] + src.p[indt] * src.dt
+#     end
+#     return nothing
+# end
 
 
 # """
