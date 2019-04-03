@@ -431,6 +431,18 @@ function read_boundary(path::String)
 end
 
 """
+  update the content in WavefieldBound, specifically
+"""
+function read_one_boundary!(bnd::WavefieldBound, fid::IOStream)
+
+    read!(fid, bnd.vz)
+    read!(fid, bnd.vx)
+    read!(fid, bnd.p )
+
+    return nothing
+end
+
+"""
    ||snapshot||
 """
 function l2norm_snapshot(spt::Snapshot)

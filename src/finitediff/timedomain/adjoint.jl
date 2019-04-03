@@ -164,3 +164,12 @@ function pressure_reconstruct_backward(bnd::WavefieldBound, wfd::Wavefield,
 
     return reshape(pre, params.nz, params.nx, params.nt)
 end
+
+function read_one_boundary!(bnd::WavefieldBound, fid::IOStream)
+
+    read!(fid, bnd.vz)
+    read!(fid, bnd.vx)
+    read!(fid, bnd.p )
+
+    return nothing
+end
