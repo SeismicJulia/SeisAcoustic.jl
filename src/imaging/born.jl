@@ -2,15 +2,24 @@
    compute the time derivative of pressure, which is savd as a matrix, the second
 axis is time step. The time derivative is approximated by central finite-difference.
 """
-function compute_dpdt!(dpdt::Matrix{Tv}, spt1::Snapshot, spt2::Snapshot,
-         mp::Vector{Tv}, spt2wfd::Vector{Ti}, it::Ti, double_dt::Tv) where {Ti<:Int64, Tv<:AbstractFloat}
+function compute_dpdt!(dpdt::Matrix{Tv}, spt1::Snapshot, spt2::Snapshot, mp::Vector{Tv},
+         src::Source, params::ModelParams, it::Ti) where {Ti<:Int64, Tv<:AbstractFloat}
 
-    for i = 1 : length(spt2wfd)
+    double_dt = params.data_format(2.0 * params.dt)
+
+    for i = 1 : length(params.spt2wfd)
         # mapping spt to pressure
-        j = spt2wfd[i]
+        j = params.spt2wfd[i]
 
         # central finite difference
         dpdt[i,it-1] = (spt2.pz[j]+spt2.px[j]-mp[i]) / double_dt
+
+        # subtract source
+        if src.it_min <= it-1 <= src.it_max
+           idx_t = it - src.it_min
+           idx_p = src.src2wfd
+           dpdt[idx_p,it-1] = dpdt[idx_p,it-1] - src.p[idx_t] * params.dt
+        end
 
         # update memory variable
         mp[i] = spt1.pz[j] + spt1.px[j]
@@ -53,9 +62,6 @@ function get_sourceside_wavefield(src::Source, ofds::ObsorbFDStencil, params::Mo
     tmp1 = zeros(params.data_format, params.Nz * params.Nx)
     tmp2 = zeros(params.data_format, params.Nz * params.Nx)
 
-    # 2 * dt, used for time derivative approximation
-    double_dt = params.data_format(2.0 * params.dt)
-
     # initialize the a matrix to save the result
     N = params.nz * params.nx
     dpdt = zeros(params.data_format, N, params.nt)
@@ -74,7 +80,7 @@ function get_sourceside_wavefield(src::Source, ofds::ObsorbFDStencil, params::Mo
         add_source!(spt2, src, it)
 
         # compute virtual source
-        compute_dpdt!(dpdt, spt1, spt2, mp, params.spt2wfd, it, double_dt)
+        compute_dpdt!(dpdt, spt1, spt2, mp, src, params, it)
 
         # prepare for next step
         copy_snapshot!(spt1, spt2)

@@ -333,7 +333,7 @@ function ModelParams(rho, vel, npml::Ti, free_surface::Bool, dz, dx, dt, tmax;
 
     # test the stable condition
     is_stable(vel, dz, dx, dt)
-    
+
     # compute finite difference coefficients
     if fd_flag == "taylor"
        fd_coefficients = finite_difference_coefficients(order)

@@ -31,16 +31,16 @@ rfds = RigidFDStencil(params);
 # initialize a source
 # isx = collect(5:60:295); ns=length(isx); isz = 2*ones(ns);
 # ot  = 0.5*rand(ns);
-# srcs = get_multi_sources(isz, isx, params; amp=100000, ot=ot);
-src = Source(30, 1500, params; amp=100000, location_flag="distance");
+srcs = get_multi_sources(isz, isx, params; amp=100000, ot=ot);
+src = Source(2, 150, params; amp=100000, location_flag="index");
 
 # # initialize recordings
-# irx = collect(1:2:params.nx);
-# irz = 1 * ones(length(irx));
-# rec = Recordings(irz, irx, params);
+irx = collect(1:2:params.nx);
+irz = 1 * ones(length(irx));
+rec = Recordings(irz, irx, params);
 
 # forward modeling of simultaneous sources
-# @time multi_step_forward!(rec, srcs, ofds, params);
+@time multi_step_forward!(rec, srcs, ofds, params);
 # @time multi_step_forward!(rec, src , ofds, params);
 # imshow(rec.p, cmap="seismic", aspect=0.1)
 

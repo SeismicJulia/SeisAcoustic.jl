@@ -1,56 +1,8 @@
 """
-   extend model parameter to include PML
-"""
-function  model_extend(m::Matrix{Tv}, npml::Ti) where {Ti<:Int64, Tv<:AbstractFloat}
-
-    (nzm, nxm) = size(m)
-    nz = nzm + 2 * npml
-    nx = nxm + 2 * npml
-
-    mext = zeros(eltype(m), nz, nx)
-
-    # central part
-    for ix = 1 : nxm
-        for iz = 1 : nzm
-            mext[iz+npml, ix+npml] = m[iz, ix]
-        end
-    end
-
-    # left and right sides (not include the over-lapping part)
-    for ix = 1 : npml
-        for iz = 1 : nzm
-            mext[iz+npml,ix         ] = m[iz,1  ]
-            mext[iz+npml,ix+npml+nxm] = m[iz,nxm]
-        end
-    end
-
-    # upper and bottom sides
-    for ix = 1 : nxm
-        for iz = 1 : npml
-            mext[iz         ,ix+npml] = m[1  ,ix]
-            mext[iz+nzm+npml,ix+npml] = m[nzm,ix]
-        end
-    end
-
-    # corners
-    for ix = 1 : npml
-        for iz = 1 : npml
-            mext[iz         , ix         ] = m[1  ,1  ]   #top-left
-            mext[iz         , ix+npml+nxm] = m[1  ,nxm]   #top-right
-            mext[iz+npml+nzm, ix         ] = m[nzm,1  ]   #bottom-left
-            mext[iz+npml+nzm, ix+npml+nxm] = m[nzm,nxm]   #bottom-right
-        end
-    end
-
-    return mext
-
-end
-
-"""
    initialize the pml damping profile in x- and z-direction
 """
 function init_pml(nz::Ti, nx::Ti, h::Tv, apml::Tv, npml::Ti,
-         omegac::Complex{Tv}) where {Ti<:Int64, Tv<:Float64}
+         omegac::Complex{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
 
     (dampz, dampzb) = damping_profile(nz, npml, apml, h, omegac)
     (dampx, dampxb) = damping_profile(nx, npml, apml, h, omegac)
