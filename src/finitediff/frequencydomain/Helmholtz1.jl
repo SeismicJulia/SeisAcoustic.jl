@@ -1,72 +1,91 @@
+struct
+
+
+
 """
    initialize the pml damping profile in z- and x-direction
 """
 function init_pml(nz::Ti, nx::Ti, h::Tv, apml::Tv, npml::Ti,
          omegac::Complex{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
 
-    (dampz, dampzb) = damping_profile(nz, npml, apml, h, omegac)
-    (dampx, dampxb) = damping_profile(nx, npml, apml, h, omegac)
+    (zdamp_integer, zdamp_stagger) = damping_profile(nz, npml, h, omegac)
+    (xdamp_integer, xdamp_stagger) = damping_profile(nx, npml, h, omegac)
 
     return dampz, dampzb, dampx, dampxb
 end
 
 """
-   set up damping profile for PML boundary conditions
+   set up damping profile for PML boundary conditions, n is the model size include pml,
+npml is the number of PML layers, omegac is complex radian frequency.
 """
-function damping_profile(n::Ti, npml::Ti, apml::Tv, h::Tv,
-                         omegac::Complex{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
-
-    # data format of computation
-    data_format = typeof(h)
+function damping_profile(n::Ti, npml::Ti, h::Tv, omegac::Complex{Tv};
+                        apml=90.0) where {Ti<:Int64, Tv<:AbstractFloat}
 
     # constants
-    I         = one(data_format)
-    pi_over_2 = data_format(0.5 * pi)
+    real_one = one(data_format)                         # 1.0
+    imag_one = zero(data_format) + im*one(data_format)  # imaginary unit i
+    pi_over_2 = data_format(0.5 * pi)                   # pi/2
 
-    # values of damp and dampb outside of pml equal to one
-    damp  = ones(Complex{etype}, n+2)
-    dampb = ones(Complex{etype}, n+2)
+    # damping profile of PML
+    damp_integer = ones(Complex{data_format}, n+2)
+    damp_stagger = ones(Complex{data_format}, n+2)
 
-    xpml  = etype(npml) * h
-    xmax  = etype(n -1) * h
+    # PML width
+    pml_width = npml * h
 
-    # both side of damp and one side of dampb
+    # model width include PML layers
+    model_width = (n - 1) * h
+
+    # both side of damp_integer and one side of damp_stagger
     for i = 1 : npml
 
-        x  = (i-1    ) * h
-        xb = (i-1+0.5) * h
+        # current coordinate of x
+        x_integer = (i-1) * h
+        x_stagger = (i-1+0.5) * h
 
-        epsilon  = apml         * (1.0 - cos((xpml-x )/xpml * pi_over_2))
-        epsilonb = apml         * (1.0 - cos((xpml-xb)/xpml * pi_over_2))
-        alpha    = (alphad-1.0) * (1.0 - cos((xpml-x )/xpml * pi_over_2)) + 1.0
-        alphab   = (alphad-1.0) * (1.0 - cos((xpml-xb)/xpml * pi_over_2)) + 1.0
+        # distance of current grid to the edge of computation area
+        dis_integer = pml_width - x_integer
+        dis_stagger = pml_width - x_stagger
 
-        damp[ i+1] = 1.0 / (alpha  + im * epsilon  / omegac)
-        dampb[i+1] = 1.0 / (alphab + im * epsilonb / omegac)
+        # pml coefficients
+        gamma_integer = apml * (real_one - cos(dis_integer / pml_width * pi_over_2))
+        gamma_stagger = apml * (real_one - cos(dis_stagger / pml_width * pi_over_2))
 
-        # damp profile is symmetrical
-        damp[n-i+2] = damp[i+1]
+        # dampping profile (one extra point) 1/(1-iγ/w)
+        damp_integer[i+1] = real_one / (real_one - imag_one * gamma_integer / omegac)
+        damp_stagger[i+1] = real_one / (real_one - imag_one * gamma_stagger / omegac)
 
+        # symmetrical damp_integer
+        damp_integer[n-i+2] = damp_integer[i+1]
     end
-    damp[  1] = damp[2  ]
-    damp[n+2] = damp[n+1]
 
-    # right side of dampb
+    damp_integer[1]   = damp_integer[2]
+    damp_integer[n+2] = damp_integer[n+1]
+
+    # right side of damp_stagger
     for i = 1 : npml + 1
 
-        xb  = xmax + 0.5 * h - (i-1)*h
+        # the coordinate of the stagger grid (from right to left)
+        x_stagger = model_width + 0.5 * h - (i-1)*h
 
-        epsilonb = apml         * (1.0 - cos((xb-xmax+xpml)/xpml * pi_over_2))
-        alphab   = (alphad-1.0) * (1.0 - cos((xb-xmax+xpml)/xpml * pi_over_2)) + 1.0
+        # distance of current grid to the edge of computation area
+        dis_stagger = x_stagger - model_width + pml_width
 
-        dampb[n-i+2] = 1.0/(alphab + im * epsilonb / omegac)
+        # pml coefficients
+        gamma_stagger = apml * (real_one - cos(dis_stagger / pml_width * pi_over_2))
+
+        # damping profile
+        damp_stagger[n-i+2] = real_one / (real_one - imag_one * gamma_stagger / omegac)
     end
-    dampb[1  ] = dampb[2]
-    dampb[n+2] = dampb[n+1]
 
-    return damp, dampb
+    damp_stagger[1]   = damp_stagger[2]
+    damp_stagger[n+2] = damp_stagger[n+1]
 
+    return damp_integer, damp_stagger
 end
+
+
+
 
 """
   compute complex bulk modulus which support visco-acoustic wave-equation
