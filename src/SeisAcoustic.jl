@@ -6,7 +6,8 @@ module SeisAcoustic
           DelimitedFiles,   # delimited text file
           SparseArrays,     # finite-difference sparse matrix
           DSP,              # smoothing and convolution
-          FFTW              # fourier transform
+          FFTW,             # fourier transform
+          OffsetArrays      # User-defined index range (similar to fortran)
 
     # the path to the binary dependency (sparse matrix multiplication)
     const spmatveclib  = abspath(joinpath(splitdir(Base.source_path())[1],"..","deps","builds","spmatvec.so"))

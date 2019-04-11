@@ -1,548 +1,615 @@
 """
-   initialize the pml damping profile in x- and z-direction
+   damping profile for 2D frequency domain finite difference
 """
-function init_pml(nz::Ti, nx::Ti, h::Tv, apml::Tv, npml::Ti,
-         omegac::Complex{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
-
-    (dampz, dampzb) = damping_profile(nz, npml, apml, h, omegac)
-    (dampx, dampxb) = damping_profile(nx, npml, apml, h, omegac)
-
-    return dampz, dampzb, dampx, dampxb
+struct DampingProfile{Tv<:AbstractFloat}
+    zdamp_integer :: Vector{Complex{Tv}}
+    zdamp_stagger :: Vector{Complex{Tv}}
+    xdamp_integer :: Vector{Complex{Tv}}
+    xdamp_stagger :: Vector{Complex{Tv}}
 end
 
 """
-   set up damping profile for PML boundary conditions
+   initialize the pml damping profile in z- and x-direction
 """
-function damping_profile(n::Ti, npml::Ti, apml::Tv, h::Tv,
-                         omegac::Complex{Tv}) where {Ti<:Int64, Tv<:Float64}
+function DampingProfile(params::ModelParams, omega::Tv;
+         apml=90.0) where {Tv<:AbstractFloat}
 
-    etype = typeof(h)
+    # this code only handle equal grid size
+    if params.dz != params.dx
+       error("the grid size doesn't equal")
+    end
 
-    # some constants
-    alphad    = 1.0
-    pi_over_2 = pi * 0.5
+    # get the damping profile in Z direction
+    (zdamp_integer, zdamp_stagger) = get_damping_profile(params.Nz, params.npml, params.dz, omega; apml=apml)
 
-    # values of damp and dampb outside of pml equal to one
-    damp  = ones(Complex{etype}, n+2)
-    dampb = ones(Complex{etype}, n+2)
+    # get the damping profile in X direction
+    (xdamp_integer, xdamp_stagger) = get_damping_profile(params.Nx, params.npml, params.dx, omega; apml=apml)
 
-    xpml  = etype(npml) * h
-    xmax  = etype(n -1) * h
+    # data format convert
+    zdamp_integer = convert(Vector{Complex{params.data_format}}, zdamp_integer)
+    zdamp_stagger = convert(Vector{Complex{params.data_format}}, zdamp_stagger)
+    xdamp_integer = convert(Vector{Complex{params.data_format}}, xdamp_integer)
+    xdamp_stagger = convert(Vector{Complex{params.data_format}}, xdamp_stagger)
 
-    # both side of damp and one side of dampb
+    # group into a struct
+    return DampingProfile(zdamp_integer, zdamp_stagger, xdamp_integer, xdamp_stagger)
+end
+
+"""
+   set up damping profile for PML boundary conditions, n is the model size include pml,
+npml is the number of PML layers, omega is radian frequency.
+"""
+function get_damping_profile(n::Ti, npml::Ti, h, omega; apml=90.0) where {Ti<:Int64}
+
+    # constants
+    pi_over_2 = 0.5 * pi   # pi/2
+
+    # damping profile of PML
+    damp_integer = ones(Complex{Float64}, n+2)
+    damp_stagger = ones(Complex{Float64}, n+2)
+
+    # PML width
+    pml_width = npml * h
+
+    # model width include PML layers
+    model_width = (n - 1) * h
+
+    # both side of damp_integer and one side of damp_stagger
     for i = 1 : npml
 
-        x  = (i-1    ) * h
-        xb = (i-1+0.5) * h
+        # current coordinate of x
+        x_integer = (i-1) * h
+        x_stagger = (i-1+0.5) * h
 
-        epsilon  = apml         * (1.0 - cos((xpml-x )/xpml * pi_over_2))
-        epsilonb = apml         * (1.0 - cos((xpml-xb)/xpml * pi_over_2))
-        alpha    = (alphad-1.0) * (1.0 - cos((xpml-x )/xpml * pi_over_2)) + 1.0
-        alphab   = (alphad-1.0) * (1.0 - cos((xpml-xb)/xpml * pi_over_2)) + 1.0
+        # distance of current grid to the edge of computation area
+        dis_integer = pml_width - x_integer
+        dis_stagger = pml_width - x_stagger
 
-        damp[ i+1] = 1.0 / (alpha  + im * epsilon  / omegac)
-        dampb[i+1] = 1.0 / (alphab + im * epsilonb / omegac)
+        # pml coefficients
+        gamma_integer = apml * (1.0 - cos(dis_integer / pml_width * pi_over_2))
+        gamma_stagger = apml * (1.0 - cos(dis_stagger / pml_width * pi_over_2))
 
-        # damp profile is symmetrical
-        damp[n-i+2] = damp[i+1]
+        # dampping profile (one extra point) 1/(1-iγ/w)
+        damp_integer[i+1] = 1.0 / (1.0 - im * gamma_integer / omega)
+        damp_stagger[i+1] = 1.0 / (1.0 - im * gamma_stagger / omega)
 
+        # symmetrical damp_integer
+        damp_integer[n-i+2] = damp_integer[i+1]
     end
-    damp[  1] = damp[2  ]
-    damp[n+2] = damp[n+1]
 
-    # right side of dampb
+    # one extra point facilitate building Helmhotz operator
+    damp_integer[1]   = damp_integer[2]
+    damp_integer[n+2] = damp_integer[n+1]
+
+    # right side of damp_stagger
     for i = 1 : npml + 1
 
-        xb  = xmax + 0.5 * h - (i-1)*h
+        # the coordinate of the stagger grid (from right to left)
+        x_stagger = model_width + 0.5 * h - (i-1)*h
 
-        epsilonb = apml         * (1.0 - cos((xb-xmax+xpml)/xpml * pi_over_2))
-        alphab   = (alphad-1.0) * (1.0 - cos((xb-xmax+xpml)/xpml * pi_over_2)) + 1.0
+        # distance of current grid to the edge of computation area
+        dis_stagger = x_stagger - (model_width - pml_width)
 
-        dampb[n-i+2] = 1.0/(alphab + im * epsilonb / omegac)
+        # pml coefficients
+        gamma_stagger = apml * (1.0 - cos(dis_stagger / pml_width * pi_over_2))
+
+        # damping profile
+        damp_stagger[n-i+2] = 1.0 / (1.0 - im * gamma_stagger / omega)
     end
-    dampb[1  ] = dampb[2]
-    dampb[n+2] = dampb[n+1]
 
-    return damp, dampb
+    damp_stagger[1]   = damp_stagger[2]
+    damp_stagger[n+2] = damp_stagger[n+1]
 
+    return damp_integer, damp_stagger
 end
 
 """
-  compute complex bulk modulus which support visco-acoustic wave-equation
+   compute complex bulk modulus which support visco-acoustic wave-equation, padding
+one extra layer.
 """
-function vel2mu_cmplx(vel::Matrix{Tv}, q::Matrix{Tv}, rho::Matrix{Tv}) where {Tv<:Float64}
+function vel2bulk(rho::Matrix{Tv}, vel::Matrix{Tv}) where {Tv<:AbstractFloat}
 
-    etype = eltype(vel)
-    (nz, nx) = size(vel)
+    # data format
+    data_format = eltype(rho)
 
-    mu = zeros(Complex{etype}, nz+2, nx+2)
+    # size of model
+    (nz, nx)    = size(rho)
 
-    # central part
+    # allocate space for bulk modulus
+    bulk = zeros(data_format, nz+2, nx+2)
     for ix = 1 : nx
         for iz = 1 : nz
-            vc = vel[iz,ix] * (1.0 - 0.5*im / q[iz,ix])
-            mu[iz+1,ix+1] = rho[iz,ix] * vc * vc
+            bulk[iz+1,ix+1] = rho[iz,ix] * vel[iz,ix] * vel[iz,ix]
         end
     end
 
+    # visco-acoustic case
+    # bulk = zeros(Complex{data_format}, nz+2, nx+2)
+    # for ix = 1 : nx
+    #     for iz = 1 : nz
+    #         vc = vel[iz,ix] * (1.0 - 0.5*im / q[iz,ix])
+    #         mu[iz+1,ix+1] = rho[iz,ix] * vc * vc
+    #     end
+    # end
+
     # left and right
     for iz = 1 : nz
-        mu[iz+1,1   ] = mu[iz+1,2   ]
-        mu[iz+1,nx+2] = mu[iz+1,nx+1]
+        bulk[iz+1, 1]    = bulk[iz+1, 2]
+        bulk[iz+1, nx+2] = bulk[iz+1, nx+1]
     end
 
     # upper and bottom
     for ix = 1 : nx
-        mu[1   ,ix+1] = mu[2   ,ix+1]
-        mu[nz+2,ix+1] = mu[nz+1,ix+1]
+        bulk[1, ix+1]    = bulk[2, ix+1]
+        bulk[nz+2, ix+1] = bulk[nz+1,ix+1]
     end
 
     # four corners
-    mu[1   ,1   ] = mu[2   ,2   ]
-    mu[1   ,nx+2] = mu[2   ,nx+1]
-    mu[nz+2,1   ] = mu[nz+1,2   ]
-    mu[nz+2,nx+2] = mu[nz+1,nx+1]
+    bulk[1, 1]       = bulk[2, 2]
+    bulk[1, nx+2]    = bulk[2, nx+1]
+    bulk[nz+2, 1   ] = bulk[nz+1, 2]
+    bulk[nz+2, nx+2] = bulk[nz+1, nx+1]
 
-    return mu
-
+    return bulk
 end
 
-
 """
-   compute buoyancy from density
+   compute buoyancy from density, padding one extra layer.
 """
-function rho2bu(rho::Matrix{Tv}) where {Tv<:Float64}
+function rho2buoyancy(rho::Matrix{Tv}) where {Tv<: AbstractFloat}
 
-    etype    = eltype(rho)
-    (nz, nx) = size(rho)
+    data_format = eltype(rho)
+    (nz, nx)    = size(rho)
 
-    bu = zeros(etype, nz+2, nx+2)
+    # allocate space for buoyancy
+    buoyancy = zeros(data_format, nz+2, nx+2)
     for ix = 1 : nx
         for iz = 1 : nz
-            if rho[iz  ,ix  ] != 0.0
-               bu[ iz+1,ix+1]  = 1.0 / rho[iz,ix]
+            if rho[iz, ix] != 0.0
+               buoyancy[iz+1, ix+1] = 1.0 / rho[iz,ix]
             else
-               bu[ iz+1,ix+1]  = 1e10
+               error("density is zero")
             end
         end
     end
 
+    # left and right layer
     for iz = 1 : nz
-        bu[iz+1,1   ] = bu[iz+1,2   ]
-        bu[iz+1,nx+2] = bu[iz+1,nx+1]
+        buoyancy[iz+1, 1]    = buoyancy[iz+1, 2]
+        buoyancy[iz+1, nx+2] = buoyancy[iz+1, nx+1]
     end
 
+    # top and bottom layer
     for ix = 1 : nx
-        bu[1   ,ix+1] = bu[2   ,ix+1]
-        bu[nz+2,ix+1] = bu[nz+1,ix+1]
+        buoyancy[1, ix+1]    = buoyancy[2, ix+1]
+        buoyancy[nz+2, ix+1] = buoyancy[nz+1, ix+1]
     end
 
     # four corners
-    bu[1   ,1   ] = bu[2   ,2   ]
-    bu[1   ,nx+2] = bu[2   ,nx+1]
-    bu[nz+2,1   ] = bu[nz+1,2   ]
-    bu[nz+2,nx+2] = bu[nz+1,nx+1]
+    buoyancy[1, 1]       = buoyancy[2, 2   ]
+    buoyancy[1, nx+2]    = buoyancy[2, nx+1]
+    buoyancy[nz+2, 1]    = buoyancy[nz+1, 2]
+    buoyancy[nz+2, nx+2] = buoyancy[nz+1, nx+1]
 
-    return bu
-
+    return buoyancy
 end
 
 """
-   get the average of buoyancy
+   get the buoyancy at stagger grid by averaging the buoyancy at reference grid
 """
-function bu_average(bu::AbstractArray{Tv,2}, i1::Ti, i2::Ti) where {Tv<:Float64, Ti<:Int64}
+function buoyancy_average!(bu::OffsetArray, buoyancy::Matrix{Tv}, i::Ti, j::Ti) where {Ti<:Int64, Tv<:AbstractFloat}
 
-    i = i1 + 1
-    j = i2 + 1
+    data_format = eltype(buoyancy)
 
-    bmm = 0.25 * (bu[i-1,j-1] + bu[i  ,j-1] + bu[i-1,j  ] + bu[i  ,j  ])
-    bpm = 0.25 * (bu[i  ,j-1] + bu[i+1,j-1] + bu[i  ,j  ] + bu[i+1,j  ])
+    # some constants
+    one_over_two  = data_format(1.0 / 2.0)
+    one_over_four = data_format(1.0 / 4.0)
 
-    bmp = 0.25 * (bu[i-1,j  ] + bu[i  ,j  ] + bu[i-1,j+1] + bu[i  ,j+1])
-    bpp = 0.25 * (bu[i  ,j  ] + bu[i+1,j  ] + bu[i  ,j+1] + bu[i+1,j+1])
+    # first column
+    bu[-1,-1] = one_over_four * (buoyancy[i-1,j-1] + buoyancy[i,j-1] + buoyancy[i-1,j] + buoyancy[i,j])
+    bu[0 ,-1] = one_over_two  * (buoyancy[i,j-1]   + buoyancy[i,j]                                    )
+    bu[1 ,-1] = one_over_four * (buoyancy[i,j-1] + buoyancy[i+1,j-1] + buoyancy[i,j] + buoyancy[i+1,j])
 
-    bm0 = 0.5  * (bu[i  ,j  ] + bu[i-1,j  ]                            )
-    bp0 = 0.5  * (bu[i  ,j  ] + bu[i+1,j  ]                            )
+    # second column
+    bu[-1,0] = one_over_two * (buoyancy[i,j] + buoyancy[i-1,j])
+    bu[0 ,0] =                 buoyancy[i,j]
+    bu[1 ,0] = one_over_two * (buoyancy[i,j] + buoyancy[i+1,j])
 
-    b0m = 0.5  * (bu[i  ,j  ] + bu[i  ,j-1]                            )
-    b0p = 0.5  * (bu[i  ,j  ] + bu[i  ,j+1]                            )
+    # third column
+    bu[-1,1] = one_over_four * (buoyancy[i-1,j] + buoyancy[i,j] + buoyancy[i-1,j+1] + buoyancy[i,j+1])
+    bu[0 ,1] = one_over_two  * (buoyancy[i,j] + buoyancy[i,j+1]                                      )
+    bu[1 ,1] = one_over_four * (buoyancy[i,j] + buoyancy[i+1,j] + buoyancy[i,j+1] + buoyancy[i+1,j+1])
 
-    b00 = bu[i,j]
-
-    return bmm, b0m, bpm, bm0, b00, bp0, bmp, b0p, bpp
+    return nothing
 end
 
 """
-   the kernal of computing the nonzero elements of helmholtz matrix, output is the
-   LU factorization of the original matrix.
+   the kernal of building Helmhotz operator, output the LU factorization of Helmhotz operator
 """
-function helmholtz_kernal(mu::AbstractArray{Complex{Tv}, 2}, bu::AbstractArray{Tv,2}, nz::Ti, nx::Ti,
-                          npml::Ti, apml::Tv, h::Tv, omegac::Complex{Tv}) where {Tv<:Float64, Ti<:Int64}
+function helmholtz_kernal(k::Matrix{Tv}, buoyancy::Matrix{Tv}, damp::DampingProfile,
+         omega::Tv, params::ModelParams) where {Tv<:AbstractFloat}
 
-    etype = eltype(bu)
+    # constants for mass acceleration averaging
+    w1 = params.data_format(0.6287326)  # c
+    w2 = params.data_format(0.0928166)  # d
+    w3 = params.data_format((1.0 - w1 - 4.0*w2) / 4.0) # (1-c-4d)/4
 
-    (dampz, dampzb, dampx, dampxb) = init_pml(nz, nx, h, apml, npml, omegac)
+    # weights for stagger and rotated grid
+    alpha = params.data_format(0.5617365  )    # α
+    beta  = params.data_format(1.0 - alpha)    # 1-α
 
-    # some constants for mixed grid combination and lump mass average
-    wm1  = 0.6287326      #(c)
-    wm2  = 0.3712667      #(4d)
-    wm3  = 1 - wm1 - wm2  #(1-c-4d)
+    # omega square and one over h square
+    omega2       = params.data_format(omega * omega)
+    one_over_h2  = params.data_format(1.0  / (params.dz * params.dz))
+    one_over_4h2 = params.data_format(0.25 / (params.dz * params.dz))
 
-    wm2  = 0.25 * wm2     # d
-    wm3  = 0.25 * wm3     # 1/4 * (1-c-4d)
-
-    w1   = 0.4382634      # 1-a
-    w2   = 1 - w1         # a
-
-    omega2      = omegac * omegac
-    one_over_h2 = 1.0 / (h * h)
-
+    # number of non-zero elements
     nnz = 0
-    irn = zeros(Int64         , 9 * nz * nx)
-    icn = zeros(Int64         , 9 * nz * nx)
-    mat = zeros(Complex{etype}, 9 * nz * nx)
+    nnz = nnz + 4*4                           # four corners
+    nnz = nnz + (params.Nx-2)*6*2             # upper and bottom
+    nnz = nnz + (params.Nz-2)*6*2             # left and right
+    nnz = nnz + (params.Nz-2)*(params.Nx-2)*9 # inner part
 
-    for i2 = 1 : nx
-        for i1 = 1 : nz
-            (bmm, b0m, bpm, bm0, b00, bp0, bmp, b0p, bpp) = bu_average(bu, i1, i2)
+    # allocate space for sparse Helmhotz matrix in coordinate format
+    row_idx = zeros(Int64, nnz) # each row has 9 non-zeros elements
+    col_idx = zeros(Int64, nnz)
+    nzval   = zeros(Complex{params.data_format}, nnz)
+    icount  = 0
 
+    # buoyancy at stagger grid
+    b = OffsetArray{params.data_format}(undef, -1:1, -1:1)
+
+    for i2 = 1 : params.Nx
+        for i1 = 1 : params.Nz
+
+            # the corresponding index for buoyancy and bulk modulus
             i = i1 + 1
             j = i2 + 1
 
-            d2p = dampxb[j  ]
-            d2m = dampxb[j-1]
-            d1p = dampzb[i  ]
-            d1m = dampzb[i-1]
+            # buoyancy at stagger grid
+            buoyancy_average!(b, buoyancy, i, i)
+
+            # damping parameter in z direction
+            d1o = damp.zdamp_integer[i]
+            d1p = damp.zdamp_stagger[i]
+            d1m = damp.zdamp_stagger[i-1]
+
+            # damping parameter in x direction
+            d2o = damp.xdamp_integer[j]
+            d2p = damp.xdamp_stagger[j]
+            d2m = damp.xdamp_stagger[j-1]
+
+            # row index
+            row_val = (i2-1) * params.Nz + i1
 
             # node (0, 0)
-            row_idx = (i2-1) * nz + i1
-            col_idx = row_idx
-            nnz = nnz + 1
+            col_val = (i2-1  ) * params.Nz + i1
+            icount  = icount + 1
+            row_idx[icount] = row_val
+            col_idx[icount] = col_val
+            nzval[icount] = (-w1 * omega2 / k[i,j]
+                             +alpha * one_over_h2  * ( d1o * (b[1,0]*d1p + b[-1,0]*d1m)
+                                                      +d2o * (b[0,1]*d2p + b[0,-1]*d2m))
+                             +beta  * one_over_4h2 * ( d1o * (b[1,1]*d1p + b[-1,-1]*d1m + b[1,-1]*d1p + b[-1,1]*d1m)
+                                                      +d2o * (b[1,1]*d2p + b[-1,-1]*d2m + b[-1,1]*d2p + b[1,-1]*d2m)))
 
-            irn[nnz] = row_idx
-            icn[nnz] = col_idx
-
-            mat[nnz] = ( wm1  * omega2 / mu[i,j]
-                        -0.25 * w1 * one_over_h2 * ( dampx[j] * (bmp*d2p + bpm*d2m + bpp*d2p + bmm*d2m)
-                                                    +dampz[i] * (bmp*d1m + bpm*d1p + bpp*d1p + bmm*d1m))
-                        -1.0  * w2 * one_over_h2 * ( dampx[j] * (b0p*d2p + b0m*d2m)
-                                                    +dampz[i] * (bp0*d1p + bm0*d1m)) )
-
-            # node (0, 1)
-            if (i2 < nx)
-               col_idx = (i2-1+1) * nz + i1
-               nnz = nnz + 1
-               irn[nnz] = row_idx
-               icn[nnz] = col_idx
-
-               mat[nnz] = ( wm2  * omega2 / mu[i,j+1]
-                           +0.25 * w1 * one_over_h2 * ( dampx[j] * ( bmp*d2p + bpp*d2p)
-                                                       +dampz[i] * (-bmp*d1m - bpp*d1p))
-                           +1.0  * w2 * one_over_h2 *   dampx[j] *   b0p*d2p             )
+            # node(-1,-1)
+            if (i1 > 1) && (i2 > 1)
+               col_val = (i2-1-1) * params.Nz + i1-1
+               icount  = icount + 1
+               row_idx[icount] = row_val
+               col_idx[icount] = col_val
+               nzval[icount] = (-w3   * omega2 / k[i-1,j-1]
+                                -beta * one_over_4h2 * (b[-1,-1]*d1o*d1m + b[-1,-1]*d2o*d2m))
             end
 
-            # node(0, -1)
+            # node(0,-1)
             if (i2 > 1)
-               col_idx = (i2-1-1) * nz + i1
-               nnz = nnz + 1
-               irn[nnz] = row_idx
-               icn[nnz] = col_idx
+               col_val = (i2-1-1) * params.Nz + i1
+               icount  = icount + 1
+               row_idx[icount] = row_val
+               col_idx[icount] = col_val
+               nzval[icount]   = (-w2 * omega2 / k[i,j-1]
+                                  -alpha  * one_over_h2 * b[0,-1] * d2o * d2m
+                                  -beta   * one_over_4h2* ( d2o*(b[-1,-1]*d2m + b[1,-1]*d2m)
+                                                           -d1o*(b[-1,-1]*d1m + b[1,-1]*d1p)))
+            end
 
-               mat[nnz] = ( wm2  * omega2 / mu[i,j-1]
-                           +0.25 * w1 * one_over_h2 * ( dampx[j] * ( bpm*d2m + bmm*d2m)
-                                                       +dampz[i] * (-bpm*d1p - bmm*d1m))
-                           +1.0  * w2 * one_over_h2 *   dampx[j] *   b0m*d2m             )
+            # node(1,-1)
+            if (i1 < params.Nz) && (i2 > 1)
+               col_val = (i2-1-1) * params.Nz + i1+1
+               icount  = icount + 1
+               row_idx[icount] = row_val
+               col_idx[icount] = col_val
+               nzval[icount]   = (-w3   * omega2 / k[i+1,j-1]
+                                  -beta * one_over_4h2 * (b[1,-1]*d1o*d1p + b[1,-1]*d2o*d2m))
             end
 
             # node(-1, 0)
             if (i1 > 1)
-               col_idx = (i2-1) * nz + i1-1
-               nnz = nnz + 1
-               irn[nnz] = row_idx
-               icn[nnz] = col_idx
-
-               mat[nnz] = ( wm2  * omega2 / mu[i-1,j]
-                           +0.25 * w1 * one_over_h2 * ( dampx[j] * (-bmp*d2p - bmm*d2m)
-                                                       +dampz[i] * ( bmp*d1m + bmm*d1m))
-                           +1.0  * w2 * one_over_h2 *   dampz[i] *   bm0*d1m             )
+               col_val = (i2-1  ) * params.Nz + i1-1
+               icount = icount + 1
+               row_idx[icount] = row_val
+               col_idx[icount] = col_val
+               nzval[icount]   = (-w2 * omega2 / k[i-1,j]
+                                  -alpha * one_over_h2  * b[-1,0] * d1o * d1m
+                                  -beta  * one_over_4h2 * ( d1o*(b[-1,-1]*d1m + b[-1,1]*d1m)
+                                                           -d2o*(b[-1,-1]*d2m + b[-1,1]*d2p)))
             end
 
             # node(1, 0)
-            if (i1 < nz)
-               col_idx = (i2-1) * nz + i1+1
-               nnz = nnz + 1
-               irn[nnz] = row_idx
-               icn[nnz] = col_idx
-
-               mat[nnz] = ( wm2  * omega2 / mu[i+1,j]
-                           +0.25 * w1 * one_over_h2 * ( dampx[j] * (-bpm*d2m - bpp*d2p)
-                                                       +dampz[i] * ( bpm*d1p + bpp*d1p))
-                           +1.0  * w2 * one_over_h2 *   dampz[i] *   bp0*d1p             )
+            if (i1 < params.Nz)
+               col_val = (i2-1  ) * params.Nz + i1+1
+               icount  = icount + 1
+               row_idx[icount] = row_val
+               col_idx[icount] = col_val
+               nzval[icount]   = (-w2 * omega2 / k[i+1,j]
+                                  -alpha * one_over_h2  * b[1,0] * d1o * d1p
+                                  -beta  * one_over_4h2 * ( d1o*(b[1,1]*d1p + b[1,-1]*d1p)
+                                                           -d2o*(b[1,1]*d2p + b[1,-1]*d2m)))
             end
 
             # node(-1, 1)
-            if (i1 > 1) && (i2 < nx)
-               col_idx = (i2-1+1) * nz + i1-1
-               nnz = nnz + 1
-               irn[nnz] = row_idx
-               icn[nnz] = col_idx
-
-               mat[nnz] = ( wm3  * omega2 / mu[i-1,j+1]
-                           +0.25 * w1 * one_over_h2 * (dampx[j] * bmp*d2p + dampz[i] * bmp*d1m))
+            if (i1 > 1) && (i2 < params.Nx)
+               col_val = (i2-1+1) * params.Nz + i1-1
+               icount  = icount + 1
+               row_idx[icount] = row_val
+               col_idx[icount] = col_val
+               nzval[icount]   = (-w3 * omega2 / k[i-1,j+1]
+                                  -beta * one_over_4h2 * (b[-1,1]*d1o*d1m + b[-1,1]*d2o*d2p))
             end
 
-            # node(1,-1)
-            if (i1 < nz) && (i2 > 1)
-               col_idx = (i2-1-1) * nz + i1+1
-               nnz = nnz + 1
-               irn[nnz] = row_idx
-               icn[nnz] = col_idx
+            # node (0, 1)
+            if (i2 < params.Nx)
+               col_val = (i2-1+1) * params.Nz + i1
+               icount  = icount + 1
+               row_idx[icount] = row_val
+               col_idx[icount] = col_val
+               nzval[icount]   = (-w2 * omega2 / k[i,j+1]
+                                  -alpha * one_over_h2  * b[0,1]*d2o*d2p
+                                  -beta  * one_over_4h2 * ( d2o*(b[-1,1]*d2p + b[1,1]*d2p)
+                                                           -d1o*(b[1,1]*d1p + b[-1,1]*d1m)))
+             end
 
-               mat[nnz] = ( wm3  * omega2 / mu[i+1,j-1]
-                           +0.25 * w1 * one_over_h2 * (dampx[j] * bpm*d2m + dampz[i] * bpm*d1p))
-            end
+             # node(1, 1)
+             if (i1 < params.Nz) && (i2 < params.Nx)
+                 col_val = (i2-1+1) * params.Nz + i1+1
+                 icount  = icount + 1
+                 row_idx[icount] = row_val
+                 col_idx[icount] = col_val
+                 nzval[icount]   = (-w3 * omega2 / k[i+1,j+1]
+                                    -beta * one_over_4h2 * (b[1,1]*d1o*d1p + b[1,1]*d2o*d2p))
+             end
 
-           # node(1, 1)
-           if (i1 < nz) && (i2 < nx)
-              col_idx = (i2-1+1) * nz + i1+1
-              nnz = nnz + 1
-              irn[nnz] = row_idx
-              icn[nnz] = col_idx
+        end # i1
+    end # i2
 
-              mat[nnz] = ( wm3  * omega2 / mu[i+1,j+1]
-                          +0.25 * w1 * one_over_h2 * (dampx[j] * bpp*d2p + dampz[i] * bpp*d1p))
-           end
-
-           # node(-1,-1)
-           if (i1 > 1) && (i2 > 1)
-              col_idx = (i2-1-1) * nz + i1-1
-              nnz = nnz + 1
-              irn[nnz] = row_idx
-              icn[nnz] = col_idx
-
-              mat[nnz] = ( wm3  * omega2 / mu[i-1,j-1]
-                          +0.25 * w1 * one_over_h2 * (dampx[j] * bmm*d2m + dampz[i] * bmm*d1m))
-           end
-
-        end
+    # check the size
+    if nnz != icount
+       error("number of non-zero element is wrong")
     end
 
-    H = sparse(irn[1:nnz], icn[1:nnz], mat[1:nnz])
-    H = lufact(H)
+    # save the sparse matrix in CSC format
+    H = sparse(row_idx, col_idx, nzval)
 
-    return H
-
+    # return the LU factorization of Helmhotz operator
+    return lu(H), H
 end
 
 """
-   For sparse matrix in coordinate form, remove the repeated ones
+   get the Helmholtz operator for one radian frequency and return its LU decomposition.
 """
-function remove_repeated_samples(m::Ti, n::Ti,
-         irow::Ti, icol::Ti, nzval::Tv) where {Ti<:Int64, Tv<:Number}
+function get_helmholtz_LU(params::ModelParams, omega)
 
-  etype = eltype(nzval)
-  nnz   = length(nzval)
+    # make data format consistent
+    omega = params.data_format(omega)
 
-  colptr = zeros(Int64, n+1)
-  rowidx = zeros(Int64, nnz)
-  nzval1 = zeros(etype, nnz)
-
-  # Determine the column length
-  for i = 1 : nnz
-      colptr[icol[i]] = colptr[icol[i]] + 1
-  end
-
-  # starting position of each column
-  k = 1
-  for j = 1 : N + 1
-      k0 = colptr[j]
-      colptr[j] = k
-      k = k + k0
-  end
-
-  # fill in the output
-  for k = 1 : nnz
-      i = irow[k]
-      j = icol[k]
-      x = nzval[k]
-      idx = colptr[j]
-      nzval1[idx] = x
-      rowidx[idx] = i
-      colptr[j  ] = idx + 1
-  end
-
-  # shift back colptr
-  for j = N : -1 : 1
-      colptr[j+1] = colptr[j]
-  end
-  colptr[1] = 1
-
-  A = spzeros(m, n)
-  A.rowval = rowidx
-  A.colptr = colptr
-  A.nzval  = nzval1
-
-  return A
-
-end
-
-"""
-   convert sparse matrix from coordinate format to CSC format
-"""
-
-function COOCSC(m::Ti, n::Ti,
-         irow::Vector{Ti}, icol::Vector{Ti}, nzval::Vector{Tv}) where {Ti<:Int64, Tv<:Number}
-
-  etype = eltype(nzval)
-  nnz   = length(nzval)
-
-  colptr = zeros(Int64, n+1)
-  rowidx = zeros(Int64, nnz)
-  nzval1 = zeros(etype, nnz)
-
-  # Determine the column length
-  for i = 1 : nnz
-      colptr[icol[i]] = colptr[icol[i]] + 1
-  end
-
-  # starting position of the element in each column
-  k = 1
-  for j = 1 : n + 1
-      k0 = colptr[j]
-      colptr[j] = k
-      k = k + k0
-  end
-
-  # fill in the output
-  for k = 1 : nnz
-      i = irow[k]
-      j = icol[k]
-      x = nzval[k]
-      idx = colptr[j]
-      nzval1[idx] = x
-      rowidx[idx] = i
-      colptr[j  ] = idx + 1
-  end
-
-  # shift back colptr
-  for j = n : -1 : 1
-      colptr[j+1] = colptr[j]
-  end
-  colptr[1] = 1
-
-  A = spzeros(m, n)
-  A.rowval = rowidx
-  A.colptr = colptr
-  A.nzval  = nzval1
-
-  return A
-
-end
-
-"""
-   evaluate the helmholtz matrix for one frequency and do LU decomposition.
-"""
-function eval_helmholtz_matrix(vel::Matrix{Tv}, q::Matrix{Tv}, rho::Matrix{Tv},
-                               nzm::Ti, nxm::Ti, npml::Ti, apml::Tv, h::Tv,
-                               omegac::Complex{Tv}) where {Ti<:Int64, Tv<:Float64}
-
-    etype = eltype(vel)
-    nz = nzm + 2 * npml
-    nx = nxm + 2 * npml
-
-    # model parameter extending
-    vele = model_extend(vel, npml)
-    qe   = model_extend(q  , npml)
-    rhoe = model_extend(rho, npml)
-    mu   = vel2mu_cmplx(vele, qe, rhoe)
-    bu   = rho2bu(rhoe)
-
-    H    = helmholtz_kernal(mu, bu, nz, nx, npml, apml, h, omegac)
-
-    return H
-
-end
-
-
-"""
-   Generate wavefield in time domain by solving acoustic wave equation in frequency domain
-"""
-function eval_wavefield_FDFD(nzm::Ti, nxm::Ti, npml::Ti, apml::Tv, h::Tv,
-                             vel::Matrix{Tv}, q::Matrix{Tv}, rho::Matrix{Tv},
-                             isz::Ti, isx::Ti, wavelet::Vector{Tv},
-                             dt::Tv, tmax::Tv, flower::Tv, fupper::Tv; print_flag=false) where {Ti<:Int64, Tv<:Float64}
-
-    etype = eltype(vel)
-
-    nz = nzm + 2*npml
-    nx = nxm + 2*npml
-
-    vele = model_extend(vel, npml)
-    qe   = model_extend(q  , npml)
-    rhoe = model_extend(rho, npml)
-    mu   = vel2mu_cmplx(vele, qe, rhoe)
-    bu   = rho2bu(rhoe)
-
-    # make the number of time samples to be even
-    # good to take advantage complex conjugate property
-    nt = round(Int64, tmax/dt) + 1
-    if mod(nt, 2) != 0
-       nt = nt + 1
+    # only support obsorbing surface boundary condition
+    if params.free_surface == true
+       error("only support obsorbing surface boundary condition")
     end
 
-    # allocate space for wavefield
-    # first dimension is time
-    wcube = zeros(Complex128, nt, nz, nx)
+    # model parameter padding to accomdate PML layers
+    vel = model_padding(params.vel, params.npml, params.free_surface)
+    rho = model_padding(params.rho, params.npml, params.free_surface)
 
-    # maximum of frequency
-    fmax = 1.0  / dt
-    df   = fmax / nt
+    # add support for visco-acoustic in future
+    # qfactor = model_padding(params.qfactor, params.npml, params.free_surface)
 
-    iw_lower = floor(Int64, flower / df) + 1
-    iw_upper = ceil( Int64, fupper / df) + 1
-    if print_flag
-       println("iw_lower=$iw_lower")
-       println("iw_upper=$iw_upper")
-    end
+    # compute bulk modulus
+    k        = vel2bulk(vel, rho)
+    buoyancy = rho2buoyancy(rho)
 
-    # transform source wavelet to frequency domain
-    if length(wavelet) < nt
-       wavelet = vcat(wavelet, zeros(nt-length(wavelet)))
-    elseif length(wavelet) > nt
-       error("the source wavelet are too long")
-    end
+    # compute the damping profile
+    damp = DampingProfile(params, omega)
 
-    # opposite convention of fourier transform
-    fwave = sqrt(nt) * ifft(wavelet)
-
-    # one frequency sample of source
-    b = zeros(Complex128, nz, nx)
-    isz_pad = isz + npml
-    isx_pad = isx + npml
-
-    # loop over frequency slice
-    for iw = iw_lower : iw_upper
-
-        omegac = Complex128(2.0 * pi * (iw-1) * df)
-        H = helmholtz_kernal(mu, bu, nz, nx, npml, apml, h, omegac)
-
-        #the correct way to implement source
-        b[isz_pad, isx_pad] = im * omegac * fwave[iw] / (vel[isz,isx]*vel[isz,isx])
-        x  = H \ vec(b)
-
-        # symmetry property
-        tmp= reshape(x, nz, nx)
-        wcube[iw     ,:,:] = tmp
-        wcube[nt-iw+2,:,:] = conj(tmp)
-
-        if print_flag
-           println("finished $iw")
-        end
-    end
-
-    # transform back to time domain
-    wcube = real(1/sqrt(nt) * fft(wcube, 1))
-
-    return wcube
-
+    # compute helmhotz operator
+    return helmholtz_kernal(k, buoyancy, damp, omega, params)
 end
+
+# """
+#    get the forward modeling wavefield via frequency domain finite difference
+# """
+# function eval_wavefield_FDFD(nzm::Ti, nxm::Ti, npml::Ti, apml::Tv, h::Tv,
+#                              vel::Matrix{Tv}, q::Matrix{Tv}, rho::Matrix{Tv},
+#                              isz::Ti, isx::Ti, wavelet::Vector{Tv},
+#                              dt::Tv, tmax::Tv, flower::Tv, fupper::Tv; print_flag=false) where {Ti<:Int64, Tv<:Float64}
+#
+#     etype = eltype(vel)
+#
+#     nz = nzm + 2*npml
+#     nx = nxm + 2*npml
+#
+#     vele = model_extend(vel, npml)
+#     qe   = model_extend(q  , npml)
+#     rhoe = model_extend(rho, npml)
+#     mu   = vel2mu_cmplx(vele, qe, rhoe)
+#     bu   = rho2bu(rhoe)
+#
+#     # make the number of time samples to be even
+#     # good to take advantage complex conjugate property
+#     nt = round(Int64, tmax/dt) + 1
+#     if mod(nt, 2) != 0
+#        nt = nt + 1
+#     end
+#
+#     # allocate space for wavefield
+#     # first dimension is time
+#     wcube = zeros(Complex128, nt, nz, nx)
+#
+#     # maximum of frequency
+#     fmax = 1.0  / dt
+#     df   = fmax / nt
+#
+#     iw_lower = floor(Int64, flower / df) + 1
+#     iw_upper = ceil( Int64, fupper / df) + 1
+#     if print_flag
+#        println("iw_lower=$iw_lower")
+#        println("iw_upper=$iw_upper")
+#     end
+#
+#     # transform source wavelet to frequency domain
+#     if length(wavelet) < nt
+#        wavelet = vcat(wavelet, zeros(nt-length(wavelet)))
+#     elseif length(wavelet) > nt
+#        error("the source wavelet are too long")
+#     end
+#
+#     # opposite convention of fourier transform
+#     fwave = sqrt(nt) * ifft(wavelet)
+#
+#     # one frequency sample of source
+#     b = zeros(Complex128, nz, nx)
+#     isz_pad = isz + npml
+#     isx_pad = isx + npml
+#
+#     # loop over frequency slice
+#     for iw = iw_lower : iw_upper
+#
+#         omegac = Complex128(2.0 * pi * (iw-1) * df)
+#         H = helmholtz_kernal(mu, bu, nz, nx, npml, apml, h, omegac)
+#
+#         #the correct way to implement source
+#         b[isz_pad, isx_pad] = im * omegac * fwave[iw] / (vel[isz,isx]*vel[isz,isx])
+#         x  = H \ vec(b)
+#
+#         # symmetry property
+#         tmp= reshape(x, nz, nx)
+#         wcube[iw     ,:,:] = tmp
+#         wcube[nt-iw+2,:,:] = conj(tmp)
+#
+#         if print_flag
+#            println("finished $iw")
+#         end
+#     end
+#
+#     # transform back to time domain
+#     wcube = real(1/sqrt(nt) * fft(wcube, 1))
+#
+#     return wcube
+#
+# end
+
+# """
+#    convert sparse matrix from coordinate format to CSC format
+# """
+# function COOCSC(m::Ti, n::Ti,
+#          irow::Vector{Ti}, icol::Vector{Ti}, nzval::Vector{Tv}) where {Ti<:Int64, Tv<:Number}
+#
+#   etype = eltype(nzval)
+#   nnz   = length(nzval)
+#
+#   colptr = zeros(Int64, n+1)
+#   rowidx = zeros(Int64, nnz)
+#   nzval1 = zeros(etype, nnz)
+#
+#   # Determine the column length
+#   for i = 1 : nnz
+#       colptr[icol[i]] = colptr[icol[i]] + 1
+#   end
+#
+#   # starting position of the element in each column
+#   k = 1
+#   for j = 1 : n + 1
+#       k0 = colptr[j]
+#       colptr[j] = k
+#       k = k + k0
+#   end
+#
+#   # fill in the output
+#   for k = 1 : nnz
+#       i = irow[k]
+#       j = icol[k]
+#       x = nzval[k]
+#       idx = colptr[j]
+#       nzval1[idx] = x
+#       rowidx[idx] = i
+#       colptr[j  ] = idx + 1
+#   end
+#
+#   # shift back colptr
+#   for j = n : -1 : 1
+#       colptr[j+1] = colptr[j]
+#   end
+#   colptr[1] = 1
+#
+#   A = spzeros(m, n)
+#   A.rowval = rowidx
+#   A.colptr = colptr
+#   A.nzval  = nzval1
+#
+#   return A
+#
+# end
+#
+# """
+#    For sparse matrix in coordinate form, remove the repeated ones
+# """
+# function remove_repeated_samples(m::Ti, n::Ti,
+#          irow::Ti, icol::Ti, nzval::Tv) where {Ti<:Int64, Tv<:Number}
+#
+#   etype = eltype(nzval)
+#   nnz   = length(nzval)
+#
+#   colptr = zeros(Int64, n+1)
+#   rowidx = zeros(Int64, nnz)
+#   nzval1 = zeros(etype, nnz)
+#
+#   # Determine the column length
+#   for i = 1 : nnz
+#       colptr[icol[i]] = colptr[icol[i]] + 1
+#   end
+#
+#   # starting position of each column
+#   k = 1
+#   for j = 1 : N + 1
+#       k0 = colptr[j]
+#       colptr[j] = k
+#       k = k + k0
+#   end
+#
+#   # fill in the output
+#   for k = 1 : nnz
+#       i = irow[k]
+#       j = icol[k]
+#       x = nzval[k]
+#       idx = colptr[j]
+#       nzval1[idx] = x
+#       rowidx[idx] = i
+#       colptr[j  ] = idx + 1
+#   end
+#
+#   # shift back colptr
+#   for j = N : -1 : 1
+#       colptr[j+1] = colptr[j]
+#   end
+#   colptr[1] = 1
+#
+#   A = spzeros(m, n)
+#   A.rowval = rowidx
+#   A.colptr = colptr
+#   A.nzval  = nzval1
+#
+#   return A
+#
+# end
