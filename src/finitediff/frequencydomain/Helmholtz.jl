@@ -12,7 +12,7 @@ end
    initialize the pml damping profile in z- and x-direction
 """
 function DampingProfile(params::ModelParams, omega::Tv;
-         apml=90.0) where {Tv<:AbstractFloat}
+         apml=900.0) where {Tv<:AbstractFloat}
 
     # this code only handle equal grid size
     if params.dz != params.dx
@@ -39,7 +39,7 @@ end
    set up damping profile for PML boundary conditions, n is the model size include pml,
 npml is the number of PML layers, omega is radian frequency.
 """
-function get_damping_profile(n::Ti, npml::Ti, h, omega; apml=90.0) where {Ti<:Int64}
+function get_damping_profile(n::Ti, npml::Ti, h, omega; apml=900.0) where {Ti<:Int64}
 
     # constants
     pi_over_2 = 0.5 * pi   # pi/2
@@ -393,7 +393,7 @@ function helmholtz_kernal(k::Matrix{Tv}, buoyancy::Matrix{Tv}, damp::DampingProf
     H = sparse(row_idx, col_idx, nzval)
 
     # return the LU factorization of Helmhotz operator
-    return lu(H), H
+    return lu(H)
 end
 
 """
@@ -417,7 +417,7 @@ function get_helmholtz_LU(params::ModelParams, omega)
     # qfactor = model_padding(params.qfactor, params.npml, params.free_surface)
 
     # compute bulk modulus
-    k        = vel2bulk(vel, rho)
+    k        = vel2bulk(rho, vel)
     buoyancy = rho2buoyancy(rho)
 
     # compute the damping profile
@@ -427,88 +427,90 @@ function get_helmholtz_LU(params::ModelParams, omega)
     return helmholtz_kernal(k, buoyancy, damp, omega, params)
 end
 
-# """
-#    get the forward modeling wavefield via frequency domain finite difference
-# """
-# function eval_wavefield_FDFD(nzm::Ti, nxm::Ti, npml::Ti, apml::Tv, h::Tv,
-#                              vel::Matrix{Tv}, q::Matrix{Tv}, rho::Matrix{Tv},
-#                              isz::Ti, isx::Ti, wavelet::Vector{Tv},
-#                              dt::Tv, tmax::Tv, flower::Tv, fupper::Tv; print_flag=false) where {Ti<:Int64, Tv<:Float64}
-#
-#     etype = eltype(vel)
-#
-#     nz = nzm + 2*npml
-#     nx = nxm + 2*npml
-#
-#     vele = model_extend(vel, npml)
-#     qe   = model_extend(q  , npml)
-#     rhoe = model_extend(rho, npml)
-#     mu   = vel2mu_cmplx(vele, qe, rhoe)
-#     bu   = rho2bu(rhoe)
-#
-#     # make the number of time samples to be even
-#     # good to take advantage complex conjugate property
-#     nt = round(Int64, tmax/dt) + 1
-#     if mod(nt, 2) != 0
-#        nt = nt + 1
-#     end
-#
-#     # allocate space for wavefield
-#     # first dimension is time
-#     wcube = zeros(Complex128, nt, nz, nx)
-#
-#     # maximum of frequency
-#     fmax = 1.0  / dt
-#     df   = fmax / nt
-#
-#     iw_lower = floor(Int64, flower / df) + 1
-#     iw_upper = ceil( Int64, fupper / df) + 1
-#     if print_flag
-#        println("iw_lower=$iw_lower")
-#        println("iw_upper=$iw_upper")
-#     end
-#
-#     # transform source wavelet to frequency domain
-#     if length(wavelet) < nt
-#        wavelet = vcat(wavelet, zeros(nt-length(wavelet)))
-#     elseif length(wavelet) > nt
-#        error("the source wavelet are too long")
-#     end
-#
-#     # opposite convention of fourier transform
-#     fwave = sqrt(nt) * ifft(wavelet)
-#
-#     # one frequency sample of source
-#     b = zeros(Complex128, nz, nx)
-#     isz_pad = isz + npml
-#     isx_pad = isx + npml
-#
-#     # loop over frequency slice
-#     for iw = iw_lower : iw_upper
-#
-#         omegac = Complex128(2.0 * pi * (iw-1) * df)
-#         H = helmholtz_kernal(mu, bu, nz, nx, npml, apml, h, omegac)
-#
-#         #the correct way to implement source
-#         b[isz_pad, isx_pad] = im * omegac * fwave[iw] / (vel[isz,isx]*vel[isz,isx])
-#         x  = H \ vec(b)
-#
-#         # symmetry property
-#         tmp= reshape(x, nz, nx)
-#         wcube[iw     ,:,:] = tmp
-#         wcube[nt-iw+2,:,:] = conj(tmp)
-#
-#         if print_flag
-#            println("finished $iw")
-#         end
-#     end
-#
-#     # transform back to time domain
-#     wcube = real(1/sqrt(nt) * fft(wcube, 1))
-#
-#     return wcube
-#
-# end
+"""
+   get the forward modeling wavefield via frequency domain finite difference
+"""
+function get_wavefield_FDFD(src::Source, params::ModelParams;
+         flower=0.0, fupper=60.0, print_flag=false)
+
+    # allocate space for 3D wavefield (nz, nx, nt)
+    N = params.nz * params.nx
+    pressure = zeros(Complex{Float64}, N, params.nt)
+
+    # frequency interval
+    fmax = 1.0  / params.dt
+    df   = fmax / params.nt
+
+    # lower frequency index bound
+    iw_lower = floor(Int64, flower / df) + 1
+    if iw_lower < 2
+       iw_lower = 2
+       @warn "can't compute when frequency <= 0Hz, minimum frequency starts from $df"
+    end
+
+    # upper frequency index bound
+    iw_upper = ceil(Int64, fupper / df) + 1
+    if iw_upper > floor(Int64, params.nt/2) + 1
+       iw_upper = floor(Int64, params.nt/2) + 1
+       fmax = (iw_upper-1)*df
+       @warn "the maximum frequency must less than nyquist frequency, maximum frequency ends at $fmax"
+    end
+
+    # allocate space for source time function
+    wlet = zeros(params.nt)
+    copyto!(wlet, src.it_min, src.p)
+
+    # transform to frequency domain
+    fwave = fft(wlet) / sqrt(params.nt)
+
+    # allocate space for left and right hand side
+    b = zeros(Complex{Float64}, params.Nz * params.Nx)
+    u = zeros(Complex{Float64}, params.Nz * params.Nx)
+
+    # only support obsorbing surface boundary condition
+    if params.free_surface == true
+       error("only support obsorbing surface boundary condition")
+    end
+
+    # padding model parameter to accomdate PML layers
+    vel = model_padding(params.vel, params.npml, params.free_surface)
+    rho = model_padding(params.rho, params.npml, params.free_surface)
+    k        = vel2bulk(rho, vel)
+    buoyancy = rho2buoyancy(rho)
+
+    # loop over all frequency slice
+    for iw = iw_lower : iw_upper
+
+        # radian frequency
+        omega = 2.0 * pi * (iw-1) * df
+
+        # build damping profile
+        damp = DampingProfile(params, omega)
+        H = helmholtz_kernal(k, buoyancy, damp, omega, params)
+
+        #the correct way to implement source
+        b[src.src2spt] = im * omega * fwave[iw] / k[src.src2spt]
+        ldiv!(u, H, b)
+
+        # save the pressure component
+        for i = 1 : N
+            tmp = u[params.spt2wfd[i]]
+            pressure[i, iw] = tmp
+            pressure[i, params.nt-iw+2] = conj(tmp)
+        end
+
+        # print the frequency slice
+        if print_flag
+           println("finished $iw")
+        end
+    end
+
+    # transform back to time domain
+    pressure = real(ifft(pressure, 2)) * sqrt(params.nt)
+
+    # return a 3D cube
+    return reshape(pressure, params.nz, params.nx, params.nt)
+end
 
 # """
 #    convert sparse matrix from coordinate format to CSC format

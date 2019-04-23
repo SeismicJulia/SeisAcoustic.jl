@@ -17,10 +17,23 @@ dz = 10; dx = 10;
 dt = 0.001; tmax = 2.0;  # use second as unit
 
 # organize these parameters into a structure
-params = ModelParams(rho, vel, npml, free_surface, dz, dx, dt, tmax; data_format=Float32)
+params = ModelParams(rho, vel, npml, free_surface, dz, dx, dt, tmax; data_format=Float64)
 
-# frequency
-f = 20.0;
-omega = 2 * pi * f;
+# absorb finte difference stencil
+ofds = ObsorbFDStencil(params);
 
-H = get_helmholtz_LU(params, omega);
+# single source
+src = Source(2, 150, params; amp=100000);
+
+# forward modeling in time domain
+path_pre = joinpath(homedir(), "Desktop/pressure.rsb");
+multi_step_forward(path_pre, src, ofds, params);
+(hdr, pre0) = read_RSdata(path_pre);
+
+# forward modeling in frequency domain
+pre1 = get_wavefield_FDFD(src, params; print_flag=true)
+
+#plotting
+it = 600
+figure(); imshow(pre0[:,:,it]);
+figure(); imshow(pre1[:,:,it]);
