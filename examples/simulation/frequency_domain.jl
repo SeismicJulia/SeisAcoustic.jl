@@ -1,4 +1,4 @@
-using SeisAcoustic
+using PyPlot, SeisAcoustic
 
 # velocity and density model
 vel = 3000 * ones(100, 300);  # m/s
@@ -34,6 +34,6 @@ multi_step_forward(path_pre, src, ofds, params);
 pre1 = get_wavefield_FDFD(src, params; print_flag=true)
 
 #plotting
-it = 600
+it = 400
 figure(); imshow(pre0[:,:,it]);
 figure(); imshow(pre1[:,:,it]);
