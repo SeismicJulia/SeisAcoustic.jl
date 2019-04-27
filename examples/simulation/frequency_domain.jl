@@ -1,8 +1,8 @@
 using PyPlot, SeisAcoustic
 
 # velocity and density model
-vel = 3000 * ones(100, 300);  # m/s
-rho = 2000 * ones(100, 300);  # kg/m^3
+vel = 3000 * ones(500, 1000);  # m/s
+rho = 2000 * ones(500, 1000);  # kg/m^3
 
 # number of PML layers
 npml = 20
@@ -17,10 +17,8 @@ dz = 10; dx = 10;
 dt = 0.001; tmax = 2.0;  # use second as unit
 
 # organize these parameters into a structure
-params = ModelParams(rho, vel, npml, free_surface, dz, dx, dt, tmax; data_format=Float64)
+params = ModelParams(rho, vel, free_surface, dz, dx, dt, tmax; data_format=Float32)
 
-# absorb finte difference stencil
-ofds = ObsorbFDStencil(params);
 
 # single source
 src = Source(2, 150, params; amp=100000);

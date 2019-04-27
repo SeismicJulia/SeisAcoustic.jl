@@ -1,66 +1,70 @@
-function multiplication!(c::Vector{Tv}, a::Vector{Tv}, b::Vector{Tv}) where {Tv<:AbstractFloat}
+function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::ModelParams{Ti,Tv},
+         tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
+         tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
 
-    for i = 1 : length(a)
-        @inbounds c[i] = a[i] * b[i]
+    # update vz column-by-column
+    for ix = 1 : params.Nx
+        ilower = (ix-1) * params.Nz + 1
+        iupper = ilower + params.Nz - 1
+        idx    = 0
+        for iz = ilower : iupper
+            idx= idx + 1
+            tmp_z1[idx] = spt1.pz[iz] + spt1.px[iz]  # p1 = pz1 + px1
+        end
+        A_mul_b!(tmp_z2, params.dpdz, tmp_z1)        # dpdz
+        idx    = 0
+        for iz = ilower : iupper
+            idx = idx + 1
+            spt2.vz[iz] = params.MvzBvz[idx]*spt1.vz[iz] + params.MvzBp[iz]*tmp_z2[idx]
+        end
     end
-    return nothing
-end
 
-function multiplication!(b::Vector{Tv}, a::Vector{Tv}) where {Tv<:AbstractFloat}
-
-    for i = 1 : length(a)
-        @inbounds b[i] = b[i] * a[i]
+    # update vx row-by-row
+    for iz = 1 : params.Nz
+        idx = iz
+        for ix = 1 : params.Nx
+            tmp_x1[ix] = spt1.pz[idx] + spt1.px[idx] # p1 = pz1 + px1
+            idx= idx + params.Nz
+        end
+        A_mul_b!(tmp_x2, params.dpdx, tmp_x1)         # dpdx
+        idx = iz
+        for ix = 1 : params.Nx
+            spt2.vx[idx] = params.MvxBvx[ix]*spt1.vx[idx] + params.MvxBp[idx]*tmp_x2[ix]
+            idx= idx + params.Nz
+        end
     end
-    return nothing
-end
 
-function addition!(c::Vector{Tv}, a::Vector{Tv}, b::Vector{Tv}) where {Tv<:AbstractFloat}
-
-    for i = 1 : length(a)
-        @inbounds c[i] = a[i]+b[i]
+    # update pz column-by-column
+    for ix = 1 : params.Nx
+        ilower = (ix-1) * params.Nz + 1
+        iupper = ilower + params.Nz - 1
+        idx    = 0
+        for iz = ilower : iupper
+            idx= idx + 1
+            tmp_z1[idx] = spt2.vz[iz]
+        end
+        A_mul_b!(tmp_z2, params.dvdz, tmp_z1)        # dpdz
+        idx    = 0
+        for iz = ilower : iupper
+            idx = idx + 1
+            spt2.pz[iz] = params.MpzBpz[idx]*spt1.pz[iz] + params.MpzBvz[iz]*tmp_z2[idx]
+        end
     end
-    return nothing
-end
 
-function addition!(a::Vector{Tv}, b::Vector{Tv}) where {Tv<:AbstractFloat}
-    for i = 1 : length(a)
-        @inbounds a[i] = a[i]+b[i]
+    # update px row-by-row
+    for iz = 1 : params.Nz
+        idx = iz
+        for ix = 1 : params.Nx
+            tmp_x1[ix] = spt2.vx[idx]
+            idx= idx + params.Nz
+        end
+        A_mul_b!(tmp_x2, params.dvdx, tmp_x1)         # dvdx
+        idx = iz
+        for ix = 1 : params.Nx
+            spt2.px[idx] = params.MpxBpx[ix]*spt1.px[idx] + params.MpxBvx[idx]*tmp_x2[ix]
+            idx= idx + params.Nz
+        end
     end
-    return nothing
-end
-
-function minus!(a::Vector{Tv}, b::Vector{Tv}, c::Vector{Tv}) where {Tv<:AbstractFloat}
-    for i = 1 : length(a)
-        @inbounds a[i] = b[i] - c[i]
-    end
-    return nothing
-end
-
-"""
-   one forward time-stepping of finite-difference
-"""
-function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, ofds::ObsorbFDStencil{Ti,Tv},
-         tmp1::Vector{Tv}, tmp2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
-
-    addition!(tmp1, spt1.pz, spt1.px)               # p1 = pz1+px1
-
-    A_mul_b!(tmp2, ofds.MvzBp, tmp1)                # tmp2= MvzBp  * p1
-    addition!(spt2.vz, tmp2)                        # vz2 = vz2    + tmp2
-
-    # update vx
-    multiplication!(spt2.vx, ofds.MvxBvx, spt1.vx)  # vx2 = MvxBvx * vx1
-    A_mul_b!(tmp2, ofds.MvxBp, tmp1)                # tmp2= MvxBp  * p1
-    addition!(spt2.vx, tmp2)                        # vx2 = vx2    + tmp2
-
-    # update pz
-    multiplication!(spt2.pz, ofds.MpzBpz, spt1.pz)  # pz2 = MpzBpz * pz1
-    A_mul_b!(tmp1, ofds.MpzBvz, spt2.vz)            # tmp1= MpzBvz * vz2
-    addition!(spt2.pz, tmp1)                        # pz2 = pz2    + tmp1
-
-    # update px
-    multiplication!(spt2.px, ofds.MpxBpx, spt1.px)  # px2 = MpxBpx * px1
-    A_mul_b!(tmp1, ofds.MpxBvx, spt2.vx)            # tmp1= MpxBvx * vx2
-    addition!(spt2.px, tmp1)                        # px2 = px2    + tmp1
 
     return nothing
 end
@@ -68,7 +72,7 @@ end
 """
    one step Forward reconstruction of wave field from the boundary values
 """
-function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield, rfds::RigidFDStencil, it::Ti,
+function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield, it::Ti,
          bnd::WavefieldBound, tmp1::Vector{Tv}, tmp2::Vector{Tv}, params::ModelParams) where {Ti<:Int64, Tv<:AbstractFloat}
 
     # update vz and vx
@@ -105,14 +109,16 @@ save_type="snapshot" : vz, vx, pz, px include PML part,
 save_type="wavefield": vz, vx, pz+px  without PML part,
 save_type="pressure" : p=pz+px without PML bounary part.
 """
-function multi_step_forward(path::String, src::Source, ofds::ObsorbFDStencil,
-         params::ModelParams; save_type="pressure")
+function multi_step_forward(path::String, src::Source, params::ModelParams;
+                            save_type="pressure")
 
     # initialize some variables
     spt1 = Snapshot(params)
     spt2 = Snapshot(params)
-    tmp1 = zeros(params.data_format, params.Nz * params.Nx)
-    tmp2 = zeros(params.data_format, params.Nz * params.Nx)
+    tmp_z1 = zeros(params.data_format, params.Nz)
+    tmp_z2 = zeros(params.data_format, params.Nz)
+    tmp_x1 = zeros(params.data_format, params.Nx)
+    tmp_x2 = zeros(params.data_format, params.Nx)
 
     # add source to the first snapshot
     add_source!(spt1, src, 1)
@@ -141,7 +147,7 @@ function multi_step_forward(path::String, src::Source, ofds::ObsorbFDStencil,
     # loop over time-stepping
     for it = 2 : params.nt
 
-        one_step_forward!(spt2, spt1, ofds, tmp1, tmp2)
+        one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         add_source!(spt2, src, it)
         copy_snapshot!(spt1, spt2)
 
@@ -161,14 +167,15 @@ end
 """
    compute recordings with a single source
 """
-function multi_step_forward!(rec::Recordings, src::Source,
-         ofds::ObsorbFDStencil, params::ModelParams)
+function multi_step_forward!(rec::Recordings, src::Source, params::ModelParams)
 
     # initialize intermediate variables
     spt1 = Snapshot(params)
     spt2 = Snapshot(params)
-    tmp1 = zeros(params.data_format, params.Nz * params.Nx)
-    tmp2 = zeros(params.data_format, params.Nz * params.Nx)
+    tmp_z1 = zeros(params.data_format, params.Nz)
+    tmp_z2 = zeros(params.data_format, params.Nz)
+    tmp_x1 = zeros(params.data_format, params.Nx)
+    tmp_x2 = zeros(params.data_format, params.Nx)
 
     # add source to the first snapshot
     add_source!(spt1, src, 1)
@@ -179,7 +186,7 @@ function multi_step_forward!(rec::Recordings, src::Source,
     # loop over time stepping
     for it = 2 : params.nt
 
-        one_step_forward!(spt2, spt1, ofds, tmp1, tmp2)
+        one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         add_source!(spt2, src, it)
         sample_spt2rec!(rec, spt2, it)
 
@@ -194,14 +201,15 @@ end
    compute recordings with multiple simultaneous source, the only difference is that the input
 is a vector of source
 """
-function multi_step_forward!(rec::Recordings, srcs::Vector{Source},
-         ofds::ObsorbFDStencil, params::ModelParams)
+function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::ModelParams)
 
     # initialize intermediate variables
     spt1 = Snapshot(params)
     spt2 = Snapshot(params)
-    tmp1 = zeros(params.data_format, params.Nz * params.Nx)
-    tmp2 = zeros(params.data_format, params.Nz * params.Nx)
+    tmp_z1 = zeros(params.data_format, params.Nz)
+    tmp_z2 = zeros(params.data_format, params.Nz)
+    tmp_x1 = zeros(params.data_format, params.Nx)
+    tmp_x2 = zeros(params.data_format, params.Nx)
 
     # add multi-sources to the first snapshot
     add_multi_sources!(spt1, srcs, 1)
@@ -212,7 +220,7 @@ function multi_step_forward!(rec::Recordings, srcs::Vector{Source},
     # loop over time
     for it = 2 : params.nt
 
-        one_step_forward!(spt2, spt1, ofds, tmp1, tmp2)
+        one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         add_multi_sources!(spt2, srcs, it)
         sample_spt2rec!(rec, spt2, it)
 
@@ -227,8 +235,8 @@ end
    compute wavefield boundary at each time step and the wavefield at last time step
 save them to hard drive.
 """
-function get_boundary_wavefield(path_bnd::String, path_wfd::String,
-         src::Source, ofds::ObsorbFDStencil, params::ModelParams)
+function get_boundary_wavefield(path_bnd::String, path_wfd::String, src::Source,
+         params::ModelParams)
 
     # one extra time step
     nt = params.nt + 1
@@ -236,8 +244,10 @@ function get_boundary_wavefield(path_bnd::String, path_wfd::String,
     # initialize variables for time stepping
     spt1 = Snapshot(params)
     spt2 = Snapshot(params)
-    tmp1 = zeros(params.data_format, params.Nz * params.Nx)
-    tmp2 = zeros(params.data_format, params.Nz * params.Nx)
+    tmp_z1 = zeros(params.data_format, params.Nz)
+    tmp_z2 = zeros(params.data_format, params.Nz)
+    tmp_x1 = zeros(params.data_format, params.Nx)
+    tmp_x2 = zeros(params.data_format, params.Nx)
 
     # add source to the first snapshot
     add_source!(spt1, src, 1)
@@ -250,7 +260,7 @@ function get_boundary_wavefield(path_bnd::String, path_wfd::String,
     # loop over time stepping
     for it = 2 : nt
 
-        one_step_forward!(spt2, spt1, ofds, tmp1, tmp2)
+        one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         add_source!(spt2, src, it)
 
         # save boundary of wavefield

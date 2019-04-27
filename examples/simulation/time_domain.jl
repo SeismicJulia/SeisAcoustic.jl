@@ -17,30 +17,30 @@ dz = 10; dx = 10;
 dt = 0.001; tmax = 2.0;  # use second as unit
 
 # organize these parameters into a structure
-params = ModelParams(rho, vel, npml, free_surface, dz, dx, dt, tmax;
-         data_format=Float32, fd_flag="taylor", order=3)
+params = ModelParams(rho, vel, free_surface, dz, dx, dt, tmax;
+         data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.)
+# shows the default value for the keyword parameters
 # data_format = (Float32 or Float64)
 # fd_flag     = ("taylor" or "ls")
 # order       = 2 - 10 if we use "ls" to compute the FD coefficients
 #             = 2 - n  if we use "taylor" expansion to compute FD coefficients
 
-# compute the sparse matrix correspinding to the FD stencil
-ofds = ObsorbFDStencil(params);
-rfds = RigidFDStencil(params);
-
 # initialize a source
+src = Source(2, 150, params; ot=0.0, fdom=20.0,
+      type_flag="ricker", amp=100000, location_flag="index");
+
+# initialize multi-sources
 # isx = collect(5:60:295); ns=length(isx); isz = 2*ones(ns);
 # ot  = 0.5*rand(ns);
-srcs = get_multi_sources(isz, isx, params; amp=100000, ot=ot);
-src = Source(2, 150, params; amp=100000, location_flag="index");
+# srcs = get_multi_sources(isz, isx, params; amp=100000, ot=ot);
 
-# # initialize recordings
+# initialize recordings
 irx = collect(1:2:params.nx);
-irz = 1 * ones(length(irx));
+irz = 2 * ones(length(irx));
 rec = Recordings(irz, irx, params);
 
 # forward modeling of simultaneous sources
-@time multi_step_forward!(rec, srcs, ofds, params);
+@time multi_step_forward!(rec, src, params);
 # @time multi_step_forward!(rec, src , ofds, params);
 # imshow(rec.p, cmap="seismic", aspect=0.1)
 

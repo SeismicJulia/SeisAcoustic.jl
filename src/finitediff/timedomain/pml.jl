@@ -1,39 +1,8 @@
 """
-   damping profile for 2D frequency domain finite difference
-"""
-struct PMLCoefficients{Tv<:AbstractFloat}
-    gammaz_integer :: Vector{Tv}
-    gammaz_stagger :: Vector{Tv}
-    gammax_integer :: Vector{Tv}
-    gammax_stagger :: Vector{Tv}
-end
-
-"""
-   initialize the pml damping profile in z- and x-direction
-"""
-function PMLCoefficients(params::ModelParams; apml=900.0) where {Tv<:AbstractFloat}
-
-    # get the damping profile in Z direction
-    (gammaz_integer, gammaz_stagger) = get_gamma_profile(params.Nz, params.npml, params.dz; apml=apml)
-
-    # get the damping profile in X direction
-    (gammax_integer, gammax_stagger) = get_gamma_profile(params.Nx, params.npml, params.dx; apml=apml)
-
-    # data format convert
-    gammaz_integer = convert(Vector{params.data_format}, gammaz_integer)
-    gammaz_stagger = convert(Vector{params.data_format}, gammaz_stagger)
-    gammax_integer = convert(Vector{params.data_format}, gammax_integer)
-    gammax_stagger = convert(Vector{params.data_format}, gammax_stagger)
-
-    # group into a struct
-    return PMLCoefficients(gammaz_integer, gammaz_stagger, gammax_integer, gammax_stagger)
-end
-
-"""
    set up damping profile for PML boundary conditions, n is the model size include pml,
 npml is the number of PML layers, omega is radian frequency.
 """
-function get_gamma_profile(n::Ti, npml::Ti, h; apml=900.0) where {Ti<:Int64}
+function get_gamma_profile(n::Ti, npml::Ti, h; apml=900.0, oneside_flag=false) where {Ti<:Int64}
 
     # constants
     pi_over_2 = 0.5 * pi   # pi/2
@@ -65,6 +34,14 @@ function get_gamma_profile(n::Ti, npml::Ti, h; apml=900.0) where {Ti<:Int64}
 
         # symmetrical gamma_integer
         gamma_integer[n-i+1] = gamma_integer[i]
+    end
+
+    # one side PML obsorbing boundary
+    if oneside_flag
+       for i = 1 : npml
+           gamma_integer[i] = 0.0
+           gamma_stagger[i] = 0.0
+       end
     end
 
     # the right side of gamma_stagger

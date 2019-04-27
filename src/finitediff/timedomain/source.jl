@@ -284,7 +284,7 @@ function add_source!(spt::Snapshot, src::Source, it::Int64)
        idx_p = src.src2spt
 
        # equvialent to adding to pressure field
-       spt.pz[idx_p] = spt.pz[idx_p] + src.p[idx_t] * src.dt
+       spt.px[idx_p] = spt.px[idx_p] + src.p[idx_t] * src.dt
     end
 
     return nothing

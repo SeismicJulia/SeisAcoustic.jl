@@ -1,78 +1,20 @@
 """
-   sparse matrix for finite-difference grid with PML boundary
-"""
-struct ObsorbFDStencil{Ti<:Int64, Tv<:AbstractFloat}
-    MvzBvz :: Vector{Tv}
-    MvzBp  :: Vector{Tv}
-    MvxBvx :: Vector{Tv}
-    MvxBp  :: Vector{Tv}
-    MpzBpz :: Vector{Tv}
-    MpzBvz :: Vector{Tv}
-    MpxBpx :: Vector{Tv}
-    MpxBvx :: Vector{Tv}
-end
-
-"""
-compute buoyancy from density term
-"""
-function density2buoyancy(rho::Matrix{Tv}) where {Tv<:AbstractFloat}
-
-    data_format = eltype(rho)
-
-    # dimensions of the model
-    (nz, nx) = size(rho)
-
-    # allocate space for buoyancy
-    buoyancy = zeros(data_format, nz, nx)
-
-    # constant
-    c_one = one(data_format)
-
-    # compute element-wise buoyancy
-    for i2 = 1 : nx
-        for i1 = 1 : nz
-            buoyancy[i1,i2] = c_one / rho[i1,i2]
-        end
-    end
-
-    return buoyancy
-end
-
-
-"""
-   compute lambda from velocity and density
-"""
-function vp2lambda(rho::Matrix{Tv}, vp::Matrix{Tv}) where {Tv<:AbstractFloat}
-
-    (m , n ) = size(rho)
-    (m1, n1) = size(vp )
-    if m1 != m || n1 != n
-       error("size mismatch")
-    end
-
-    lambda = zeros(eltype(vp), m, n)
-    for j = 1 : n
-        for i = 1 : m
-            lambda[i,j] = rho[i,j] * vp[i,j] * vp[i,j]
-        end
-    end
-    return lambda
-end
-
-"""
    Define the partial derivative operator for v_z with PML boundary
 """
-function Mvz(gammaz_stagger::Vector{Tv}, buoyancy::Matrix{Tv},
-         dz::Tv, dt::Tv) where {Tv<:AbstractFloat}
+function Mvz(gammaz_stagger::Vector{Tv}, buoy::Matrix{Tv},
+         dz::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:AbstractFloat}
 
     # size of the model
-    (nz, nx) = size(buoyancy)
+    (nz, nx) = size(buoy)
     if nz != length(gammaz_stagger)
        error("size mismatch")
     end
 
+    # precision order
+    order = length(fd)
+
     # data format
-    data_format = eltype(buoyancy)
+    data_format = eltype(buoy)
     double      = data_format(2.0)
 
     # the coefficients in front of v_z
@@ -90,9 +32,9 @@ function Mvz(gammaz_stagger::Vector{Tv}, buoyancy::Matrix{Tv},
 
             # averge of density
             if i < nz
-               bavg = (buoyancy[i,j] + buoyancy[i+1,j]) / double
+               bavg = (buoy[i,j] + buoy[i+1,j]) / double
             else
-               bavg = buoyancy[i,j]
+               bavg = buoy[i,j]
             end
 
             MvzBp[idx] = (double*bavg) / (double+dt*gammaz_stagger[i])
@@ -101,46 +43,98 @@ function Mvz(gammaz_stagger::Vector{Tv}, buoyancy::Matrix{Tv},
     end
 
     # spatial partial derivative
-    tmp = zeros(data_format, nz, nz)
-    for iz = 1 : nz
-        lower = iz - order + 1 >= 1 ? iz-order+1 : 1
-        upper = iz + order     <= m ? iz+order   : m
+    dpdz = zeros(data_format, nz, nz)
+    for ir = 1 : nz
+        lower = ir - order + 1 >= 1  ? ir-order+1 : 1
+        upper = ir + order     <= nz ? ir+order   : nz
 
-        for ix = lower : upper
-            if ix-iz <= 0
-               idx = iz-ix + 1
-               tmp[iz,ix] = - c[idx]
-            elseif ix-iz >= 1
-               idx = ix-iz
-               tmp[iz,ix] =   c[idx]
+        for ic = lower : upper
+            if ic-ir <= 0
+               idx = ir-ic + 1
+               dpdz[ir,ic] = - fd[idx]
+            elseif ic-ir >= 1
+               idx = ic-ir
+               dpdz[ir,ic] =   fd[idx]
             end
         end
     end
 
-        MvzBvz = c_diag
-        MvzBp  = spdiagm(0 => denum) * kron(spdiagm(0=>ones(data_format,n)), sparse(tmp))
+    return MvzBvz, MvzBp, sparse(dpdz)
+end
 
+"""
+   Define the partial derivative operator for v_z with rigid boundary
+"""
+function Rvz(buoy::Matrix{Tv}, dz::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:AbstractFloat}
 
-    return MvzBvz, MvzBp
+    # size of the model
+    (nz, nx) = size(buoy)
+
+    # precision order
+    order = length(fd)
+
+    # data format
+    data_format = eltype(buoy)
+    double      = data_format(2.0)
+
+    # the coefficients in front of p
+    RvzBp  = ones(data_format, nz*nx)
+    idx = 0
+    for j = 1 : nx
+        for i = 1 : nz
+            idx = idx + 1
+
+            # averge of density
+            if i < nz
+               bavg = (buoy[i,j] + buoy[i+1,j]) / double
+            else
+               bavg = buoy[i,j]
+            end
+
+            RvzBp[idx] = bavg * dt / dz
+        end
+    end
+
+    # spatial partial derivative
+    rpdz = zeros(data_format, nz, nz)
+    for ir = 1 : nz
+        lower = ir - order + 1 >= 1  ? ir-order+1 : 1
+        upper = ir + order     <= nz ? ir+order   : nz
+
+        for ic = lower : upper
+            if ic-ir <= 0
+               idx = ir-ic + 1
+               rpdz[ir,ic] = - fd[idx]
+            elseif ic-ir >= 1
+               idx = ic-ir
+               rpdz[ir,ic] =   fd[idx]
+            end
+        end
+    end
+
+    return RvzBp, sparse(rpdz)
 end
 
 """
    Define the partial derivative operator for v_x with PML boundary
 """
-function Mvx(gammax_stagger::Vector{Tv}, buoyancy::Matrix{Tv},
-         dx::Tv, dt::Tv) where {Tv<:AbstractFloat}
+function Mvx(gammax_stagger::Vector{Tv}, buoy::Matrix{Tv},
+         dx::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:AbstractFloat}
 
     # size of the model
-    (nz, nx) = size(buoyancy)
+    (nz, nx) = size(buoy)
     if nx != length(gammax_stagger)
        error("size mismatch")
     end
 
+    # precision order
+    order = length(fd)
+
     # data format
-    data_format = eltype(buoyancy)
+    data_format = eltype(buoy)
     double      = data_format(2.0)
 
-    # the coefficients in front of v_z
+    # the coefficients in front of v_x
     MvxBvx = ones(data_format, nx)
     for j = 1 : nx
         MvxBvx[j] = (double - dt * gammax_stagger[j]) / (double + dt * gammax_stagger[j])
@@ -155,9 +149,9 @@ function Mvx(gammax_stagger::Vector{Tv}, buoyancy::Matrix{Tv},
 
             # averge of density
             if j < nx
-               bavg = (buoyancy[i,j] + buoyancy[i,j+1]) / double
+               bavg = (buoy[i,j] + buoy[i,j+1]) / double
             else
-               bavg = buoyancy[i,j]
+               bavg = buoy[i,j]
             end
 
             MvxBp[idx] = (double*bavg) / (double+dt*gammax_stagger[j])
@@ -165,14 +159,84 @@ function Mvx(gammax_stagger::Vector{Tv}, buoyancy::Matrix{Tv},
         end
     end
 
-    return MvxBvx, MvxBp
+    # spatial partial derivative dpdx
+    dpdx = zeros(data_format, nx, nx)
+    for ir = 1 : nx
+        lower = ir - order + 1 >= 1  ? ir-order+1 : 1
+        upper = ir + order     <= nx ? ir+order   : nx
+
+        for ic = lower : upper
+            if ic-ir <= 0
+               idx = ir - ic + 1
+               dpdx[ir,ic] = - fd[idx]
+            elseif ic-ir >= 1
+               idx = ic - ir
+               dpdx[ir,ic] =   fd[idx]
+            end
+        end
+    end
+
+    return MvxBvx, MvxBp, sparse(dpdx)
+end
+
+"""
+   Define the partial derivative operator for v_x with rigid boundary
+"""
+function Rvx(buoy::Matrix{Tv}, dx::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:AbstractFloat}
+
+    # size of the model
+    (nz, nx) = size(buoy)
+
+    # precision order
+    order = length(fd)
+
+    # data format
+    data_format = eltype(buoy)
+    double      = data_format(2.0)
+
+    # the coefficients in front of p
+    RvxBp  = ones(data_format, nz*nx)
+    idx = 0
+    for j = 1 : nx
+        for i = 1 : nz
+            idx = idx + 1
+
+            # averge of density
+            if j < nx
+               bavg = (buoy[i,j] + buoy[i,j+1]) / double
+            else
+               bavg = buoy[i,j]
+            end
+
+            RvxBp[idx] = bavg * dt / dx
+        end
+    end
+
+    # spatial partial derivative dpdx
+    rpdx = zeros(data_format, nx, nx)
+    for ir = 1 : nx
+        lower = ir - order + 1 >= 1  ? ir-order+1 : 1
+        upper = ir + order     <= nx ? ir+order   : nx
+
+        for ic = lower : upper
+            if ic-ir <= 0
+               idx = ir - ic + 1
+               rpdx[ir,ic] = - fd[idx]
+            elseif ic-ir >= 1
+               idx = ic - ir
+               rpdx[ir,ic] =   fd[idx]
+            end
+        end
+    end
+
+    return RvxBp, sparse(rpdx)
 end
 
 """
    Define the partial derivative operator for p_z with PML boundary
 """
 function Mpz(gammaz_integer::Vector{Tv}, bulk::Matrix{Tv},
-         dz::Tv, dt::Tv) where {Tv<:AbstractFloat}
+         dz::Tv, dt::Tv, fd::Vector) where {Tv<:AbstractFloat}
 
     # size of the model
     (nz, nx) = size(bulk)
@@ -180,17 +244,20 @@ function Mpz(gammaz_integer::Vector{Tv}, bulk::Matrix{Tv},
        error("size mismatch")
     end
 
+    # precision order
+    order = length(fd)
+
     # data format
     data_format = eltype(bulk)
     double      = data_format(2.0)
 
-    # the coefficients in front of v_z
+    # the coefficients in front of p_z
     MpzBpz = ones(data_format, nz)
     for i = 1 : nz
         MpzBpz[i] = (double - dt * gammaz_integer[i]) / (double + dt * gammaz_integer[i])
     end
 
-    # the coefficients in front of p
+    # the coefficients in front of v_z
     MpzBvz = ones(data_format, nz*nx)
     idx = 0
     for j = 1 : nx
@@ -201,50 +268,76 @@ function Mpz(gammaz_integer::Vector{Tv}, bulk::Matrix{Tv},
         end
     end
 
-    return MpzBpz, MpzBvz
+    # spatial partial derivative dvdz
+    dvdz = zeros(data_format, nz, nz)
+    for ir = 1 : nz
+        lower = ir - order     >= 1  ? ir-order   : 1
+        upper = ir + order - 1 <= nz ? ir+order-1 : nz
+
+        for ic = lower : upper
+            if ic-ir <= -1
+               idx = ir-ic
+               dvdz[ir,ic] = - fd[idx]
+            elseif ic-ir >= 0
+               idx = ic-ir+1
+               dvdz[ir,ic] =   fd[idx]
+            end
+        end
+    end
+
+    return MpzBpz, MpzBvz, sparse(dvdz)
 end
 
 """
-   Define the partial derivative operator for p_z with PML boundary
+   Define the partial derivative operator for p_z with rigid boundary
 """
-function Mpz(gammaz_integer::Vector{Tv}, bulk::Matrix{Tv},
-         dz::Tv, dt::Tv) where {Tv<:AbstractFloat}
+function Rpz(bulk::Matrix{Tv}, dz::Tv, dt::Tv, fd::Vector) where {Tv<:AbstractFloat}
 
     # size of the model
     (nz, nx) = size(bulk)
-    if nz != length(gammaz_integer)
-       error("size mismatch")
-    end
+
+    # precision order
+    order = length(fd)
 
     # data format
     data_format = eltype(bulk)
     double      = data_format(2.0)
 
     # the coefficients in front of v_z
-    MpzBpz = ones(data_format, nz)
-    for i = 1 : nz
-        MpzBpz[i] = (double - dt * gammaz_integer[i]) / (double + dt * gammaz_integer[i])
-    end
-
-    # the coefficients in front of p
-    MpzBvz = ones(data_format, nz*nx)
+    RpzBvz = ones(data_format, nz*nx)
     idx = 0
     for j = 1 : nx
         for i = 1 : nz
             idx = idx + 1
-            MpzBvz[idx] = (double * bulk[i,j]) / (double+dt*gammaz_integer[i])
-            MpzBvz[idx] = MpzBvz[idx] * dt / dz
+            RpzBvz[idx] = bulk[i,j] * dt / dz
         end
     end
 
-    return MpzBpz, MpzBvz
+    # spatial partial derivative dvdz
+    rvdz = zeros(data_format, nz, nz)
+    for ir = 1 : nz
+        lower = ir - order     >= 1  ? ir-order   : 1
+        upper = ir + order - 1 <= nz ? ir+order-1 : nz
+
+        for ic = lower : upper
+            if ic-ir <= -1
+               idx = ir-ic
+               rvdz[ir,ic] = - fd[idx]
+            elseif ic-ir >= 0
+               idx = ic-ir+1
+               rvdz[ir,ic] =   fd[idx]
+            end
+        end
+    end
+
+    return RpzBvz, sparse(rvdz)
 end
 
 """
-   Define the partial derivative operator for p_z with PML boundary
+   Define the partial derivative operator for p_x with PML boundary
 """
 function Mpx(gammax_integer::Vector{Tv}, bulk::Matrix{Tv},
-         dx::Tv, dt::Tv) where {Tv<:AbstractFloat}
+         dx::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:AbstractFloat}
 
     # size of the model
     (nz, nx) = size(bulk)
@@ -252,17 +345,20 @@ function Mpx(gammax_integer::Vector{Tv}, bulk::Matrix{Tv},
        error("size mismatch")
     end
 
+    # precision order
+    order = length(fd)
+
     # data format
     data_format = eltype(bulk)
     double      = data_format(2.0)
 
-    # the coefficients in front of v_z
+    # the coefficients in front of p_x
     MpxBpx = ones(data_format, nx)
     for j = 1 : nx
         MpxBpx[j] = (double - dt * gammax_integer[j]) / (double + dt * gammax_integer[j])
     end
 
-    # the coefficients in front of p
+    # the coefficients in front of v_x
     MpxBvx = ones(data_format, nz*nx)
     idx = 0
     for j = 1 : nx
@@ -273,32 +369,69 @@ function Mpx(gammax_integer::Vector{Tv}, bulk::Matrix{Tv},
         end
     end
 
-    return MpxBpx, MpxBvx
+    # spatial partial derivative dvdx
+    dvdx = zeros(data_format, nx, nx)
+    for ir = 1 : nx
+        lower = ir - order     >= 1  ? ir-order   : 1
+        upper = ir + order - 1 <= nx ? ir+order-1 : nx
+
+        for ic = lower : upper
+            if ic-ir <= -1
+               idx = ir - ic
+               dvdx[ir,ic] = - fd[idx]
+            elseif ic-ir >= 0
+               idx = ic - ir + 1
+               dvdx[ir,ic] =   fd[idx]
+            end
+        end
+    end
+
+    return MpxBpx, MpxBvx, sparse(dvdx)
 end
 
 """
-   constructor for obsorbing finite difference stencil
+   Define the partial derivative operator for p_x with rigid boundary
 """
-function ObsorbFDStencil(params::ModelParams)
+function Rpx(bulk::Matrix{Tv}, dx::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:AbstractFloat}
 
-    # pml coefficient
-    pml = PMLCoefficients(params)
+    # size of the model
+    (nz, nx) = size(bulk)
 
-    # compute buoyancy and bulk modulus
-    buoy = density2buoyancy(params.rho)
-    bulk = vp2lambda(params.rho, params.vel)
+    # precision order
+    order = length(fd)
 
-    # padding model parameters to accomdate PML
-    buoy = model_padding(buoy, params.npml, params.free_surface)
-    bulk = model_padding(bulk, params.npml, params.free_surface)
+    # data format
+    data_format = eltype(bulk)
+    double      = data_format(2.0)
 
-    (MvzBvz, MvzBp ) = Mvz(pml.gammaz_stagger, buoy, params.dz, params.dt)
-    (MvxBvx, MvxBp ) = Mvx(pml.gammax_stagger, buoy, params.dx, params.dt)
-    (MpzBpz, MpzBvz) = Mpz(pml.gammaz_integer, bulk, params.dz, params.dt)
-    (MpxBpx, MpxBvx) = Mpx(pml.gammax_integer, bulk, params.dx, params.dt)
+    # the coefficients in front of v_x
+    RpxBvx = ones(data_format, nz*nx)
+    idx = 0
+    for j = 1 : nx
+        for i = 1 : nz
+            idx = idx + 1
+            RpxBvx[idx] = bulk[i,j] * dt / dx
+        end
+    end
 
-    return ObsorbFDStencil(MvzBvz, MvzBp , MvxBvx, MvxBp,
-                           MpzBpz, MpzBvz, MpxBpx, MpxBvx)
+    # spatial partial derivative dvdx
+    rvdx = zeros(data_format, nx, nx)
+    for ir = 1 : nx
+        lower = ir - order     >= 1  ? ir-order   : 1
+        upper = ir + order - 1 <= nx ? ir+order-1 : nx
+
+        for ic = lower : upper
+            if ic-ir <= -1
+               idx = ir - ic
+               rvdx[ir,ic] = - fd[idx]
+            elseif ic-ir >= 0
+               idx = ic - ir + 1
+               rvdx[ir,ic] =   fd[idx]
+            end
+        end
+    end
+
+    return RpxBvx, sparse(rvdx)
 end
 
 # """
