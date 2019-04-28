@@ -1,14 +1,15 @@
-using SeisAcoustic
+using SeisPlot, SeisAcoustic
 
 # velocity and density model
 vel = 3000 * ones(100, 300);  # m/s
+vel[51:end,:] .= 3500.0  # m/s
 rho = 2000 * ones(100, 300);  # kg/m^3
 
 # number of PML layers
 npml = 20
 
 # top boundary condition
-free_surface = false    #(pml or free_surface)
+free_surface = true    #(pml or free_surface)
 
 # vertical and horizontal grid size
 dz = 10; dx = 10;
@@ -41,28 +42,28 @@ rec = Recordings(irz, irx, params);
 
 # forward modeling of simultaneous sources
 @time multi_step_forward!(rec, src, params);
-# @time multi_step_forward!(rec, src , ofds, params);
-# imshow(rec.p, cmap="seismic", aspect=0.1)
+# @time multi_step_forward!(rec, srcs, params);
+SeisPlotTX(rec.p, pclip=98)
 
 # forward modeling and save the pressure field to hard drive
 path_pre = joinpath(homedir(), "Desktop/pressure.rsb");
-multi_step_forward(path_pre, src, ofds, params);
+multi_step_forward(path_pre, src, params);
 (hdr, pre0) = read_RSdata(path_pre);
 
 # # save the boundary of wavefield, which can be used for reconstruction
 path_bnd = joinpath(homedir(), "Desktop/boundary.rsb")
 path_wfd = joinpath(homedir(), "Desktop/wavefield.rsb")
-get_boundary_wavefield(path_bnd, path_wfd, src, ofds, params)
+get_boundary_wavefield(path_bnd, path_wfd, src, params)
 
 # read boundary and last wavefield
 bnd  = read_boundary(path_bnd);
 wfd  = read_one_wavefield(path_wfd, 1);
 
 # reconstruct the pressure field forward
-pre1 = pressure_reconstruct_forward(bnd, rfds, src, params);
+pre1 = pressure_reconstruct_forward(bnd, src, params);
 
 # reconstruct the pressure field backward
-pre2 = pressure_reconstruct_backward(bnd, wfd, rfds, src, params);
+# pre2 = pressure_reconstruct_backward(bnd, wfd, rfds, src, params);
 
 
 # test the adjoint operator

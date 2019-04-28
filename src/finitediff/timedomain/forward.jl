@@ -70,40 +70,6 @@ function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::Model
 end
 
 """
-   one step Forward reconstruction of wave field from the boundary values
-"""
-function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield, it::Ti,
-         bnd::WavefieldBound, tmp1::Vector{Tv}, tmp2::Vector{Tv}, params::ModelParams) where {Ti<:Int64, Tv<:AbstractFloat}
-
-    # update vz and vx
-    A_mul_b!(tmp1, rfds.MvzBp, wfd1.p)
-    A_mul_b!(tmp2, rfds.MvxBp, wfd1.p)
-    addition!(wfd2.vz, wfd1.vz, tmp1)
-    addition!(wfd2.vx, wfd1.vx, tmp2)
-
-    # correct for boundary part
-    for i = 1 : length(params.bnd2wfd)
-        j = params.bnd2wfd[i]
-        wfd2.vz[j] = bnd.vz[i,it]
-        wfd2.vx[j] = bnd.vx[i,it]
-    end
-
-    # update pressure
-    A_mul_b!(tmp1, rfds.MpxBvx, wfd2.vx)
-    A_mul_b!(tmp2, rfds.MpzBvz, wfd2.vz)
-    addition!(tmp1, tmp2)
-    addition!(wfd2.p, wfd1.p, tmp1)
-
-    # correct for boundary part
-    for i = 1 : length(params.bnd2wfd)
-        j = params.bnd2wfd[i]
-        wfd2.p[j] = bnd.p[i,it]
-    end
-
-    return nothing
-end
-
-"""
 save snapshot or full wave field or pressure field to hard drive, inject single source
 save_type="snapshot" : vz, vx, pz, px include PML part,
 save_type="wavefield": vz, vx, pz+px  without PML part,
@@ -281,23 +247,109 @@ function get_boundary_wavefield(path_bnd::String, path_wfd::String, src::Source,
 end
 
 """
+   one step-forward reconstruction of wavefield via recording the boundary value
+"""
+function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield, it::Ti,
+         bnd::WavefieldBound, params::ModelParams,
+         tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
+         tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
+
+    # update vz column-by-column
+    for ix = 1 : params.nx
+        ilower = (ix-1) * params.nz + 1
+        iupper = ilower + params.nz - 1
+        idx    = 0
+        for iz = ilower : iupper
+            idx= idx + 1
+            tmp_z1[idx] = wfd1.p[iz]
+        end
+        A_mul_b!(tmp_z2, params.rpdz, tmp_z1)        # dpdz
+        idx    = 0
+        for iz = ilower : iupper
+            idx = idx + 1
+            wfd2.vz[iz] = wfd1.vz[iz] + params.RvzBp[iz]*tmp_z2[idx]
+        end
+    end
+
+    # update vx row-by-row
+    for iz = 1 : params.nz
+        idx = iz
+        for ix = 1 : params.nx
+            tmp_x1[ix] = wfd1.p[idx]
+            idx= idx + params.nz
+        end
+        A_mul_b!(tmp_x2, params.rpdx, tmp_x1)         # dpdx
+        idx = iz
+        for ix = 1 : params.nx
+            wfd2.vx[idx] = wfd1.vx[idx] + params.RvxBp[idx]*tmp_x2[ix]
+            idx= idx + params.nz
+        end
+    end
+
+    # correct for boundary part
+    for i = 1 : length(params.bnd2wfd)
+        j = params.bnd2wfd[i]
+        wfd2.vz[j] = bnd.vz[i,it]
+        wfd2.vx[j] = bnd.vx[i,it]
+    end
+
+    # update pz column-by-column
+    for ix = 1 : params.nx
+        ilower = (ix-1) * params.nz + 1
+        iupper = ilower + params.nz - 1
+        idx    = 0
+        for iz = ilower : iupper
+            idx= idx + 1
+            tmp_z1[idx] = wfd2.vz[iz]
+        end
+        A_mul_b!(tmp_z2, params.rvdz, tmp_z1)        # dpdz
+        idx    = 0
+        for iz = ilower : iupper
+            idx = idx + 1
+            wfd2.p[iz] = wfd1.p[iz] + params.RpzBvz[iz]*tmp_z2[idx]
+        end
+    end
+
+    # update px row-by-row
+    for iz = 1 : params.nz
+        idx = iz
+        for ix = 1 : params.nx
+            tmp_x1[ix] = wfd2.vx[idx]
+            idx= idx + params.nz
+        end
+        A_mul_b!(tmp_x2, params.rvdx, tmp_x1)         # dvdx
+        idx = iz
+        for ix = 1 : params.nx
+            wfd2.p[idx] = wfd2.p[idx] + params.RpxBvx[idx]*tmp_x2[ix]
+            idx= idx + params.nz
+        end
+    end
+
+    # correct for boundary part
+    for i = 1 : length(params.bnd2wfd)
+        j = params.bnd2wfd[i]
+        wfd2.p[j] = bnd.p[i,it]
+    end
+
+    return nothing
+end
+
+"""
    Forward reconstruct acoustic pressure field using the saved boundary wavefield value and
 the source (used for concept proofing)
 """
-function pressure_reconstruct_forward(bnd::WavefieldBound, rfds::RigidFDStencil,
-         src::Source, params::ModelParams)
+function pressure_reconstruct_forward(bnd::WavefieldBound, src::Source, params::ModelParams)
 
     # length of one-step pressure field
     N = params.nz * params.nx
 
-    # decide the number of boundary layers
-    order = length(params.fd_coefficients)
-
     # initialize intermediate variables
     wfd1 = Wavefield(params)
     wfd2 = Wavefield(params)
-    tmp1 = zeros(params.data_format, N)
-    tmp2 = zeros(params.data_format, N)
+    tmp_z1 = zeros(params.data_format, params.nz)
+    tmp_z2 = zeros(params.data_format, params.nz)
+    tmp_x1 = zeros(params.data_format, params.nx)
+    tmp_x2 = zeros(params.data_format, params.nx)
 
     # allocate memory for saving pressure field
     pre = zeros(params.data_format, N * params.nt)
@@ -315,10 +367,12 @@ function pressure_reconstruct_forward(bnd::WavefieldBound, rfds::RigidFDStencil,
     for it = 2 : params.nt
 
         # forward time steping and correcting boundaries
-        one_step_forward!(wfd2, wfd1, rfds, it, bnd, tmp1, tmp2, params)
+        one_step_forward!(wfd2, wfd1, it, bnd, params,
+                          tmp_z1, tmp_z2, tmp_x1, tmp_x2)
 
         # add source to wavefield
-        if order+1 <= src.isz <= params.nz-order && order+1 <= src.isx <= params.nx-order
+        if (params.order+1 <= src.isz <= params.nz-params.order &&
+            params.order+1 <= src.isx <= params.nx-params.order)
            add_source!(wfd2, src, it)
         end
 

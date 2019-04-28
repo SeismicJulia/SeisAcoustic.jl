@@ -8,7 +8,7 @@ rho = 2000 * ones(500, 1000);  # kg/m^3
 npml = 20
 
 # top boundary condition
-free_surface = false    #(pml or free_surface)
+free_surface = true    #(pml or free_surface)
 
 # vertical and horizontal grid size
 dz = 10; dx = 10;
@@ -18,7 +18,6 @@ dt = 0.001; tmax = 2.0;  # use second as unit
 
 # organize these parameters into a structure
 params = ModelParams(rho, vel, free_surface, dz, dx, dt, tmax; data_format=Float32)
-
 
 # single source
 src = Source(2, 150, params; amp=100000);

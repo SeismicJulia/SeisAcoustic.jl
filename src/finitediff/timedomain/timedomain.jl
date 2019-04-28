@@ -62,17 +62,16 @@ export get_gamma_profile,
        inject_rec2spt!,
 # ============= forward time stepping =============
        A_mul_b!,
-       At_mul_b!
+       At_mul_b!,
 # ============= forward time stepping =============
-       # one_step_forward!,
-       # one_step_backward!,
-       # multi_step_forward,
-       # multi_step_forward!,
-       # get_boundary_wavefield,
-       # pressure_reconstruct_forward,
+       one_step_forward!,
+       multi_step_forward,
+       multi_step_forward!,
+       get_boundary_wavefield,
+       pressure_reconstruct_forward
 # ============= adjoint time stepping =============
        # one_step_adjoint!,
-       # one_step_backward,
+       # one_step_backward!,
        # multi_step_adjoint,
        # pressure_reconstruct_backward
 
@@ -83,7 +82,7 @@ include("snapshot.jl")
 include("source.jl")
 include("recordings.jl")
 include("spmatvec.jl")
-# include("forward.jl")
+include("forward.jl")
 # include("adjoint.jl")
 
 

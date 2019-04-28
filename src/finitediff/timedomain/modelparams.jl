@@ -60,6 +60,7 @@ struct ModelParams{Ti<:Int64, Tv<:AbstractFloat}
     spt2wfd      :: Vector{Ti}
     spt2bnd      :: Vector{Ti}
     bnd2wfd      :: Vector{Ti}
+    order        :: Ti
     dz           :: Tv
     dx           :: Tv
     dt           :: Tv
@@ -496,7 +497,7 @@ function ModelParams(rho, vel, free_surface::Bool, dz, dx, dt, tmax;
 
     # call the default struct constructor
     return ModelParams(data_format, nz, nx, npml, free_surface, Nz, Nx, ntop,
-                       spt2wfd, spt2bnd, bnd2wfd,
+                       spt2wfd, spt2bnd, bnd2wfd, order,
                        dz, dx, dt, tmax, nt, rho, vel,
                        MvzBvz, MvzBp , RvzBp , dpdz, rpdz,
                        MvxBvx, MvxBp , RvxBp , dpdx, rpdx,
