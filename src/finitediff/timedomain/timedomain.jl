@@ -43,6 +43,7 @@ export get_gamma_profile,
        l2norm_snapshot,
        minus_snapshot,
        add_snapshot,
+       reverse_order,
 # # ==================== Source =================
        Source,
        ricker,

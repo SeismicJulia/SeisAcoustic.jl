@@ -350,7 +350,7 @@ function boundary_header(params::ModelParams)
 
     # the extra boundary value is used to compute time derivative of source-side wavefield
     # via central finite difference
-    n3 = params.nt+1
+    n3 = params.nt
 
     # label
     label1="elements"
@@ -503,43 +503,45 @@ function add_snapshot(spt1::Snapshot, spt2::Snapshot)
     return Snapshot(vz, vx, pz, px)
 end
 
-# """
-#    reverse the order of snapshot or wavefield or pressure (path_tmp) and save them in the new
-# file(path)
-# """
-# function reverse_order(path::String, path_tmp::String; data_type="snapshot")
-#
-#     # read header
-#     hdr = read_RSheader(path_tmp)
-#
-#     # write header
-#     fid = write_RSheader(path, hdr)
-#
-#     # the length of field at one time step
-#     if data_type == "snapshot" || data_type == "wavefield"
-#        N = hdr.n1 * hdr.n2 * hdr.n3
-#     elseif datatype == "pressure"
-#        N = hdr.n1 * hdr.n2
-#     end
-#
-#     elength = sizeof(hdr.data_format) * N
-#     fid_tmp = open(path_tmp, "r")
-#     tmp     = zeros(hdr.data_format, N)
-#
-#     for it = 1 : hdr.nt
-#
-#         position = field_location[:data] + elength * (hdr.nt-it)
-#         seek(fid_tmp, position)
-#
-#         read!(fid_tmp, tmp);
-#         write(fid, tmp)
-#     end
-#
-#     close(fid_tmp)
-#     close(fid)
-#
-#     return nothing
-# end
+"""
+   reverse the order of snapshot or wavefield or pressure (path_tmp) and save them in the new
+file(path)
+"""
+function reverse_order(path::String, path_tmp::String; save_flag="snapshot")
+
+    # read header
+    hdr = read_RSheader(path_tmp)
+
+    # write header
+    fid = write_RSheader(path, hdr)
+
+    # the length of field at one time step
+    if save_flag == "snapshot" || save_flag == "wavefield"
+       N = hdr.n1 * hdr.n2 * hdr.n3
+       nt= hdr.n4
+    elseif save_flag == "pressure"
+       N = hdr.n1 * hdr.n2
+       nt= hdr.n2
+    end
+
+    elength = sizeof(hdr.data_format) * N
+    fid_tmp = open(path_tmp, "r")
+    tmp     = zeros(hdr.data_format, N)
+
+    for it = 1 : nt
+
+        position = field_location[:data] + elength * (nt-it)
+        seek(fid_tmp, position)
+
+        read!(fid_tmp, tmp);
+        write(fid, tmp)
+    end
+
+    close(fid_tmp)
+    close(fid)
+
+    return nothing
+end
 
 #////////////////////// fixed them at this step ////////////////////////////////
 # """

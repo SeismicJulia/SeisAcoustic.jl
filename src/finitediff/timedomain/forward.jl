@@ -75,8 +75,8 @@ save_type="snapshot" : vz, vx, pz, px include PML part,
 save_type="wavefield": vz, vx, pz+px  without PML part,
 save_type="pressure" : p=pz+px without PML bounary part.
 """
-function multi_step_forward(path::String, src::Source, params::ModelParams;
-                            save_type="pressure")
+function multi_step_forward!(path::String, src::Source, params::ModelParams;
+                            save_flag="pressure")
 
     # initialize some variables
     spt1 = Snapshot(params)
@@ -90,19 +90,19 @@ function multi_step_forward(path::String, src::Source, params::ModelParams;
     add_source!(spt1, src, 1)
 
     # save snapshot
-    if save_type == "snapshot"
+    if save_flag == "snapshot"
        hdr = snapshot_header(params)
        fid = write_RSheader(path, hdr)
        append_one_snapshot(fid, spt1)
 
     # save wavefield
-    elseif save_type == "wavefield"
+    elseif save_flag == "wavefield"
        hdr = wavefield_header(params)
        fid = write_RSheader(path, hdr)
        append_one_wavefield(fid, spt1, params)
 
     # save pressure
-    elseif save_type == "pressure"
+    elseif save_flag == "pressure"
        hdr = pressure_header(params)
        fid = write_RSheader(path, hdr)
        append_one_pressure(fid, spt1, params)
@@ -117,11 +117,11 @@ function multi_step_forward(path::String, src::Source, params::ModelParams;
         add_source!(spt2, src, it)
         copy_snapshot!(spt1, spt2)
 
-        if save_type == "snapshot"
+        if save_flag == "snapshot"
            append_one_snapshot(fid, spt1)
-        elseif save_type == "wavefield"
+        elseif save_flag == "wavefield"
            append_one_wavefield(fid, spt1, params)
-        elseif save_type == "pressure"
+        elseif save_flag == "pressure"
            append_one_pressure(fid, spt1, params)
         end
     end
@@ -204,9 +204,6 @@ save them to hard drive.
 function get_boundary_wavefield(path_bnd::String, path_wfd::String, src::Source,
          params::ModelParams)
 
-    # one extra time step
-    nt = params.nt + 1
-
     # initialize variables for time stepping
     spt1 = Snapshot(params)
     spt2 = Snapshot(params)
@@ -224,7 +221,7 @@ function get_boundary_wavefield(path_bnd::String, path_wfd::String, src::Source,
     append_one_boundary(fid, spt1, params)
 
     # loop over time stepping
-    for it = 2 : nt
+    for it = 2 : params.nt
 
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         add_source!(spt2, src, it)
