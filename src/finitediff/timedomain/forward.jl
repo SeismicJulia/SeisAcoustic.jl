@@ -1,4 +1,53 @@
+"""
+   compute the partial derivative in vertical direction
+"""
+function vertical_partial_derivative!(r::Vector{Tv}, p::Vector{Tv}, dpdz::SparseMatrixCSC{Tv,Ti},
+         nz::Ti, nx::Ti, tmp1::Vector{Tv}, tmp2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
+
+    istart = 1
+    for ix = 1 : nx
+
+        # process column by column
+        copyto!(tmp1, 1, p, istart, nz)
+
+        # main part
+        A_mul_b!(tmp2, dpdz, tmp1)
+
+        # save the result
+        copyto!(r, istart, tmp2, 1, nz)
+
+        # prepart for next column
+        istart = istart + nz
+    end
+
+    return nothing
+end
+
+"""
+   compute the partial derivative in horizontal direction
+"""
+function horizontal_partial_derivative!(r::Vector{Tv}, p::Vector{Tv}, dpdx::SparseMatrixCSC{Tv,Ti},
+         nz::Ti, nx::Ti, tmp1::Vector{Tv}, tmp2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
+
+    for iz = 1 : nz
+
+        # extract one row
+        BLAS.blascopy!(nx, pointer(p)+sizeof(Tv)*(iz-1), nz, tmp1, 1)
+
+        # main part
+        A_mul_b!(tmp_x2, params.dpdx, tmp_x1)
+
+        # save the result
+        BLAS.blascopy!(nx, tmp2, 1, pointer(r)+sizeof(Tv)*(iz-1), nz)
+
+    end
+
+    return nothing
+end
+
+
 function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::ModelParams{Ti,Tv},
+         tmp_a1::Vector{Tv}, tmp_a2::Vector{Tv},
          tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
          tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
 
@@ -18,6 +67,7 @@ function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::Model
             spt2.vz[iz] = params.MvzBvz[idx]*spt1.vz[iz] + params.MvzBp[iz]*tmp_z2[idx]
         end
     end
+    # sum
 
     # update vx row-by-row
     for iz = 1 : params.Nz
