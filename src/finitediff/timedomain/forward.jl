@@ -131,11 +131,74 @@ function multi_step_forward!(path::String, src::Source, params::ModelParams;
 end
 
 """
-   compute recordings with a single source
+save snapshot or full wave field or pressure field to hard drive, inject multiple simultaneouse source
+save_type="snapshot" : vz, vx, pz, px include PML part,
+save_type="wavefield": vz, vx, pz+px  without PML part,
+save_type="pressure" : p=pz+px without PML bounary part.
 """
-function multi_step_forward!(rec::Recordings, src::Source, params::ModelParams)
+function multi_step_forward!(path::String, srcs::Vector{Source}, params::ModelParams;
+                            save_flag="pressure")
 
-    # initialize intermediate variables
+    # initialize some variables
+    spt1 = Snapshot(params)
+    spt2 = Snapshot(params)
+    tmp_z1 = zeros(params.data_format, params.Nz)
+    tmp_z2 = zeros(params.data_format, params.Nz)
+    tmp_x1 = zeros(params.data_format, params.Nx)
+    tmp_x2 = zeros(params.data_format, params.Nx)
+
+    # add source to the first snapshot
+    add_multi_sources!(spt1, srcs, 1)
+
+    # save snapshot
+    if save_flag == "snapshot"
+       hdr = snapshot_header(params)
+       fid = write_RSheader(path, hdr)
+       append_one_snapshot(fid, spt1)
+
+    # save wavefield
+    elseif save_flag == "wavefield"
+       hdr = wavefield_header(params)
+       fid = write_RSheader(path, hdr)
+       append_one_wavefield(fid, spt1, params)
+
+    # save pressure
+    elseif save_flag == "pressure"
+       hdr = pressure_header(params)
+       fid = write_RSheader(path, hdr)
+       append_one_pressure(fid, spt1, params)
+    else
+       error("save_type only support snapshot, wavefield or pressure")
+    end
+
+    # loop over time-stepping
+    for it = 2 : params.nt
+
+        one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+        add_multi_sources!(spt2, srcs, it)
+        copy_snapshot!(spt1, spt2)
+
+        if save_flag == "snapshot"
+           append_one_snapshot(fid, spt1)
+        elseif save_flag == "wavefield"
+           append_one_wavefield(fid, spt1, params)
+        elseif save_flag == "pressure"
+           append_one_pressure(fid, spt1, params)
+        end
+    end
+
+    close(fid)
+    return nothing
+end
+
+"""
+   compute the recordings via forward modelling with single source, the boundary and the wavefield
+at the last time step are saved if "path_bnd" and "path_wfd" are given.
+"""
+function multi_step_forward!(rec::Recordings, src::Source, params::ModelParams;
+         path_bnd="NULL", path_wfd="NULL")
+
+    # initialize variables for time stepping
     spt1 = Snapshot(params)
     spt2 = Snapshot(params)
     tmp_z1 = zeros(params.data_format, params.Nz)
@@ -149,60 +212,49 @@ function multi_step_forward!(rec::Recordings, src::Source, params::ModelParams)
     # obtain the first time sample of recordings
     sample_spt2rec!(rec, spt1, 1)
 
+    # save the boundary of the first wavefield
+    if path_bnd != "NULL"
+       hdr = boundary_header(params)
+       fid = write_RSheader(path_bnd, hdr)
+       append_one_boundary(fid, spt1, params)
+    end
+
     # loop over time stepping
     for it = 2 : params.nt
 
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         add_source!(spt2, src, it)
-        sample_spt2rec!(rec, spt2, it)
+        sample_spt2rec!(rec, spt1, it)
 
-        # prepare for next time step
+        # save boundary of wavefield
+        if path_bnd != "NULL"
+           append_one_boundary(fid, spt2, params)
+        end
+
+        # prepare for next iteration
         copy_snapshot!(spt1, spt2)
+    end
+
+    # finish saving all the boundary values, close the file
+    if path_bnd != "NULL"
+       close(fid)
+    end
+
+    # save the wavefield at the final time step
+    if path_wfd != "NULL"
+       wfd = sample_spt2wfd(spt1, params)
+       write_wavefield(path_wfd, wfd, params)
     end
 
     return nothing
 end
 
 """
-   compute recordings with multiple simultaneous source, the only difference is that the input
-is a vector of source
+   compute the recordings via forward modelling with simultaneouse source, the boundary and the wavefield
+at the last time step are saved if "path_bnd" and "path_wfd" are given.
 """
-function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::ModelParams)
-
-    # initialize intermediate variables
-    spt1 = Snapshot(params)
-    spt2 = Snapshot(params)
-    tmp_z1 = zeros(params.data_format, params.Nz)
-    tmp_z2 = zeros(params.data_format, params.Nz)
-    tmp_x1 = zeros(params.data_format, params.Nx)
-    tmp_x2 = zeros(params.data_format, params.Nx)
-
-    # add multi-sources to the first snapshot
-    add_multi_sources!(spt1, srcs, 1)
-
-    # sample the snapshot to fill recordings
-    sample_spt2rec!(rec, spt1, 1)
-
-    # loop over time
-    for it = 2 : params.nt
-
-        one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
-        add_multi_sources!(spt2, srcs, it)
-        sample_spt2rec!(rec, spt2, it)
-
-        # prepare for the next time step
-        copy_snapshot!(spt1, spt2)
-    end
-
-    return nothing
-end
-
-"""
-   compute wavefield boundary at each time step and the wavefield at last time step
-save them to hard drive.
-"""
-function get_boundary_wavefield(path_bnd::String, path_wfd::String, src::Source,
-         params::ModelParams)
+function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::ModelParams;
+         path_bnd="NULL", path_wfd="NULL")
 
     # initialize variables for time stepping
     spt1 = Snapshot(params)
@@ -213,32 +265,45 @@ function get_boundary_wavefield(path_bnd::String, path_wfd::String, src::Source,
     tmp_x2 = zeros(params.data_format, params.Nx)
 
     # add source to the first snapshot
-    add_source!(spt1, src, 1)
+    add_multi_sources!(spt1, srcs, 1)
+
+    # obtain the first time sample of recordings
+    sample_spt2rec!(rec, spt1, 1)
+
 
     # save the boundary of the first wavefield
-    hdr = boundary_header(params)
-    fid = write_RSheader(path_bnd, hdr)
-    append_one_boundary(fid, spt1, params)
+    if path_bnd != "NULL"
+       hdr = boundary_header(params)
+       fid = write_RSheader(path_bnd, hdr)
+       append_one_boundary(fid, spt1, params)
+    end
 
     # loop over time stepping
     for it = 2 : params.nt
 
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
-        add_source!(spt2, src, it)
+        add_multi_sources!(spt2, srcs, it)
+        sample_spt2rec!(rec, spt1, it)
 
         # save boundary of wavefield
-        append_one_boundary(fid, spt2, params)
+        if path_bnd != "NULL"
+           append_one_boundary(fid, spt2, params)
+        end
 
         # prepare for next iteration
         copy_snapshot!(spt1, spt2)
     end
 
     # finish saving all the boundary values, close the file
-    close(fid)
+    if path_bnd != "NULL"
+       close(fid)
+    end
 
     # save the wavefield at the final time step
-    wfd = sample_spt2wfd(spt1, params)
-    write_wavefield(path_wfd, wfd, params)
+    if path_wfd != "NULL"
+       wfd = sample_spt2wfd(spt1, params)
+       write_wavefield(path_wfd, wfd, params)
+    end
 
     return nothing
 end
@@ -246,7 +311,7 @@ end
 """
    one step-forward reconstruction of wavefield via recording the boundary value
 """
-function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield, it::Ti,
+function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield,
          bnd::WavefieldBound, params::ModelParams,
          tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
          tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
@@ -286,8 +351,8 @@ function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield, it::Ti,
     # correct for boundary part
     for i = 1 : length(params.bnd2wfd)
         j = params.bnd2wfd[i]
-        wfd2.vz[j] = bnd.vz[i,it]
-        wfd2.vx[j] = bnd.vx[i,it]
+        wfd2.vz[j] = bnd.vz[i]
+        wfd2.vx[j] = bnd.vx[i]
     end
 
     # update pz column-by-column
@@ -325,7 +390,7 @@ function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield, it::Ti,
     # correct for boundary part
     for i = 1 : length(params.bnd2wfd)
         j = params.bnd2wfd[i]
-        wfd2.p[j] = bnd.p[i,it]
+        wfd2.p[j] = bnd.p[i]
     end
 
     return nothing
@@ -335,7 +400,8 @@ end
    Forward reconstruct acoustic pressure field using the saved boundary wavefield value and
 the source (used for concept proofing)
 """
-function pressure_reconstruct_forward(bnd::WavefieldBound, src::Source, params::ModelParams)
+function pressure_reconstruct_forward(path_bnd::Ts, src::Source,
+         params::ModelParams) where {Ts <: String}
 
     # length of one-step pressure field
     N = params.nz * params.nx
@@ -347,6 +413,10 @@ function pressure_reconstruct_forward(bnd::WavefieldBound, src::Source, params::
     tmp_z2 = zeros(params.data_format, params.nz)
     tmp_x1 = zeros(params.data_format, params.nx)
     tmp_x2 = zeros(params.data_format, params.nx)
+
+    # initialize boundary value
+    fid_bnd = open(path_bnd, "r")
+    bnd = WavefieldBound(params)
 
     # allocate memory for saving pressure field
     pre = zeros(params.data_format, N * params.nt)
@@ -363,8 +433,11 @@ function pressure_reconstruct_forward(bnd::WavefieldBound, src::Source, params::
     # loop over time stepping
     for it = 2 : params.nt
 
+        # read the boundary value
+        read_one_boundary!(bnd, fid_bnd, it, params)
+
         # forward time steping and correcting boundaries
-        one_step_forward!(wfd2, wfd1, it, bnd, params,
+        one_step_forward!(wfd2, wfd1, bnd, params,
                           tmp_z1, tmp_z2, tmp_x1, tmp_x2)
 
         # add source to wavefield
@@ -381,9 +454,143 @@ function pressure_reconstruct_forward(bnd::WavefieldBound, src::Source, params::
         copy_wavefield!(wfd1, wfd2)
     end
 
+    close(fid_bnd)
     return reshape(pre, params.nz, params.nx, params.nt)
 end
 
+"""
+   Forward reconstruct acoustic pressure field using the saved boundary wavefield value and
+the source (used for concept proofing)
+"""
+function pressure_reconstruct_forward(path_bnd::Ts, srcs::Vector{Source},
+         params::ModelParams) where {Ts <: String}
+
+    # length of one-step pressure field
+    N = params.nz * params.nx
+
+    # number of sources
+    ns= length(srcs)
+
+    # initialize intermediate variables
+    wfd1   = Wavefield(params)
+    wfd2   = Wavefield(params)
+    tmp_z1 = zeros(params.data_format, params.nz)
+    tmp_z2 = zeros(params.data_format, params.nz)
+    tmp_x1 = zeros(params.data_format, params.nx)
+    tmp_x2 = zeros(params.data_format, params.nx)
+
+    # initialize boundary value
+    fid_bnd = open(path_bnd, "r")
+    bnd = WavefieldBound(params)
+
+    # allocate memory for saving pressure field
+    pre = zeros(params.data_format, N * params.nt)
+
+    # add source to the first wavefield
+    add_multi_sources!(wfd1, srcs, 1)
+
+    # save pressure field
+    copyto!(pre, 1, wfd1.p, 1, N)
+
+    # the start index for saving the next pressure field
+    idx_o = N+1
+
+    # loop over time stepping
+    for it = 2 : params.nt
+
+        # read the boundary value
+        read_one_boundary!(bnd, fid_bnd, it, params)
+
+        # forward time steping and correcting boundaries
+        one_step_forward!(wfd2, wfd1, bnd, params,
+                          tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+
+        # loop over sources
+        for i = 1 : ns
+            if (params.order+1 <= srcs[i].isz <= params.nz-params.order &&
+                params.order+1 <= srcs[i].isx <= params.nx-params.order)
+               add_source!(wfd2, srcs[i], it)
+            end
+        end
+
+        # save the pressure field
+        copyto!(pre, idx_o, wfd2.p, 1, N)
+        idx_o = idx_o + N
+
+        # prepare for next step
+        copy_wavefield!(wfd1, wfd2)
+    end
+
+    close(fid_bnd)
+    return reshape(pre, params.nz, params.nx, params.nt)
+end
+
+# """
+#    compute recordings with a single source
+# """
+# function multi_step_forward!(rec::Recordings, src::Source, params::ModelParams)
+#
+#     # initialize intermediate variables
+#     spt1 = Snapshot(params)
+#     spt2 = Snapshot(params)
+#     tmp_z1 = zeros(params.data_format, params.Nz)
+#     tmp_z2 = zeros(params.data_format, params.Nz)
+#     tmp_x1 = zeros(params.data_format, params.Nx)
+#     tmp_x2 = zeros(params.data_format, params.Nx)
+#
+#     # add source to the first snapshot
+#     add_source!(spt1, src, 1)
+#
+#     # obtain the first time sample of recordings
+#     sample_spt2rec!(rec, spt1, 1)
+#
+#     # loop over time stepping
+#     for it = 2 : params.nt
+#
+#         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+#         add_source!(spt2, src, it)
+#         sample_spt2rec!(rec, spt2, it)
+#
+#         # prepare for next time step
+#         copy_snapshot!(spt1, spt2)
+#     end
+#
+#     return nothing
+# end
+#
+# """
+#    compute recordings with multiple simultaneous source, the only difference is that the input
+# is a vector of source
+# """
+# function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::ModelParams)
+#
+#     # initialize intermediate variables
+#     spt1 = Snapshot(params)
+#     spt2 = Snapshot(params)
+#     tmp_z1 = zeros(params.data_format, params.Nz)
+#     tmp_z2 = zeros(params.data_format, params.Nz)
+#     tmp_x1 = zeros(params.data_format, params.Nx)
+#     tmp_x2 = zeros(params.data_format, params.Nx)
+#
+#     # add multi-sources to the first snapshot
+#     add_multi_sources!(spt1, srcs, 1)
+#
+#     # sample the snapshot to fill recordings
+#     sample_spt2rec!(rec, spt1, 1)
+#
+#     # loop over time
+#     for it = 2 : params.nt
+#
+#         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+#         add_multi_sources!(spt2, srcs, it)
+#         sample_spt2rec!(rec, spt2, it)
+#
+#         # prepare for the next time step
+#         copy_snapshot!(spt1, spt2)
+#     end
+#
+#     return nothing
+# end
 
 # function multiplication!(c::Vector{Tv}, a::Vector{Tv}, b::Vector{Tv}) where {Tv<:AbstractFloat}
 #

@@ -321,6 +321,21 @@ function add_multi_sources!(spt::Snapshot, srcs::Vector{Source}, it::Int64)
 end
 
 """
+   add multi-sources simultaneously to snapshot
+"""
+function add_multi_sources!(wfd::Wavefield, srcs::Vector{Source}, it::Int64)
+
+    # number of sources
+    ns = length(srcs)
+
+    # loop over each source
+    for i = 1 : ns
+        add_source!(wfd, srcs[i], it)
+    end
+    return nothing
+end
+
+"""
    subtract source from wavefield, used for backward wavefield reconstruction
 """
 function subtract_source!(wfd::Wavefield, src::Source, it::Int64)
@@ -331,6 +346,27 @@ function subtract_source!(wfd::Wavefield, src::Source, it::Int64)
 
        wfd.p[idx_p] = wfd.p[idx_p] - src.p[idx_t] * src.dt
     end
+    return nothing
+end
+
+"""
+   subtract multiple sources from wavefield, used for backward wavefield reconstruction
+"""
+function subtract_multi_sources!(wfd::Wavefield, srcs::Vector{Source}, it::Int64)
+
+    # number of sources
+    ns = length(srcs)
+
+    # loop over sources
+    for i = 1 : ns
+        if srcs[i].it_min <= it <= srcs[i].it_max
+           idx_t = it - srcs[i].it_min + 1
+           idx_p = srcs[i].src2wfd
+
+           wfd.p[idx_p] = wfd.p[idx_p] - srcs[i].p[idx_t] * srcs[i].dt
+        end
+    end
+
     return nothing
 end
 

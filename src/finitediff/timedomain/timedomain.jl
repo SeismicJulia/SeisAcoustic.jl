@@ -19,6 +19,7 @@ export get_gamma_profile,
        Snapshot,
        Wavefield,
        sample_spt2wfd,
+       sample_adjoint2pre!,
        snapshot_header,
        append_one_snapshot,
        read_one_snapshot,
@@ -39,7 +40,7 @@ export get_gamma_profile,
        write_boundary,
        append_one_boundary,
        read_boundary,
-       read_one_boundary,
+       read_one_boundary!,
        l2norm_snapshot,
        minus_snapshot,
        add_snapshot,
@@ -54,6 +55,7 @@ export get_gamma_profile,
        add_source!,
        add_multi_sources!,
        subtract_source!,
+       subtract_multi_sources!,
        time_range_multisources,
 # # ==================== Recordings ===============
        Recordings,
@@ -66,15 +68,13 @@ export get_gamma_profile,
        At_mul_b!,
 # ============= forward time stepping =============
        one_step_forward!,
-       multi_step_forward,
        multi_step_forward!,
-       get_boundary_wavefield,
-       pressure_reconstruct_forward
+       pressure_reconstruct_forward,
 # ============= adjoint time stepping =============
-       # one_step_adjoint!,
-       # one_step_backward!,
-       # multi_step_adjoint,
-       # pressure_reconstruct_backward
+       one_step_adjoint!,
+       multi_step_adjoint!,
+       one_step_backward!,
+       pressure_reconstruct_backward
 
 include("pml.jl")
 include("fdstencil.jl")
@@ -84,7 +84,7 @@ include("source.jl")
 include("recordings.jl")
 include("spmatvec.jl")
 include("forward.jl")
-# include("adjoint.jl")
+include("adjoint.jl")
 
 
 

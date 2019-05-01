@@ -1,25 +1,24 @@
 using SeisPlot, SeisAcoustic
 
-# velocity and density model
-vel = 3000 * ones(100, 300);  # m/s
-vel[51:end,:] .= 3500.0  # m/s
-rho = 2000 * ones(100, 300);  # kg/m^3
+# homogeneous velocity and density model
+vel = 3000 * ones(101, 301);  # m/s
+rho = 2000 * ones(101, 301);  # kg/m^3
 
 # number of PML layers
-npml = 20
+npml = 20;
 
 # top boundary condition
-free_surface = true    #(pml or free_surface)
+free_surface = true;   #(pml or free_surface)
 
 # vertical and horizontal grid size
 dz = 10; dx = 10;
 
 # time step size and maximum modelling length
-dt = 0.001; tmax = 2.0;  # use second as unit
+dt = 0.001; tmax = 1.5;  # use second as unit
 
 # organize these parameters into a structure
 params = ModelParams(rho, vel, free_surface, dz, dx, dt, tmax;
-         data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.)
+         data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
 # shows the default value for the keyword parameters
 # data_format = (Float32 or Float64)
 # fd_flag     = ("taylor" or "ls")
@@ -27,7 +26,7 @@ params = ModelParams(rho, vel, free_surface, dz, dx, dt, tmax;
 #             = 2 - n  if we use "taylor" expansion to compute FD coefficients
 
 # initialize a source
-src = Source(2, 150, params; ot=0.0, fdom=20.0,
+src = Source(2, 150, params; ot=0.0, fdom=5.0,
       type_flag="ricker", amp=100000, location_flag="index");
 
 # initialize multi-sources
@@ -38,54 +37,101 @@ src = Source(2, 150, params; ot=0.0, fdom=20.0,
 # initialize recordings
 irx = collect(1:2:params.nx);
 irz = 2 * ones(length(irx));
-rec = Recordings(irz, irx, params);
+rec_syn = Recordings(irz, irx, params);
+
+# save the boundary value and last wavefield
+path_bnd = joinpath(homedir(), "Desktop/boundary.rsb");
+path_wfd = joinpath(homedir(), "Desktop/wavefield.rsb");
 
 # forward modeling of simultaneous sources
-@time multi_step_forward!(rec, src, params);
+@time multi_step_forward!(rec_syn, src, params; path_bnd=path_bnd, path_wfd=path_wfd);
+
 # @time multi_step_forward!(rec, srcs, params);
-# SeisPlotTX(rec.p, pclip=98)
-#
-# forward modeling and save the pressure field to hard drive
-path_pre = joinpath(homedir(), "Desktop/pressure.rsb");
-multi_step_forward!(path_pre, src, params);
-(hdr, pre0) = read_RSdata(path_pre);
-
-# save the boundary of wavefield, which can be used for reconstruction
-path_bnd = joinpath(homedir(), "Desktop/boundary.rsb")
-path_wfd = joinpath(homedir(), "Desktop/wavefield.rsb")
-get_boundary_wavefield(path_bnd, path_wfd, src, params)
-
-# read boundary and last wavefield
-bnd  = read_boundary(path_bnd);
-wfd  = read_one_wavefield(path_wfd, 1);
-
-# reconstruct the pressure field forward
-pre1 = pressure_reconstruct_forward(bnd, src, params);
-
-# reconstruct the pressure field backward
-pre2 = pressure_reconstruct_backward(bnd, wfd, src, params);
+SeisPlotTX(rec_syn.p, pclip=98);
 
 
-# path_pre = joinpath(homedir(), "Desktop/snashot.rsb");
-# multi_step_forward!(path_pre, src, params; save_flag="snapshot");
+# true velocity model
+vel1 = copy(vel);
+vel1[51,151] = 3000*(1+1e-7);
+params1 = ModelParams(rho, vel1, free_surface, dz, dx, dt, tmax;
+          data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.)
 
-path_spt = joinpath(homedir(), "Desktop/snashot.rsb");
-multi_step_adjoint!(path_spt, rec, params; save_flag="snapshot")
+rec_obs = Recordings(irz, irx, params1);
+
+# forward modeling of simultaneous sources
+multi_step_forward!(rec_obs, src, params1);
+SeisPlotTX(rec_obs.p, pclip=98);
+
+# compute the residue
+residue = Recordings(irz, irx, params);
+for ir = 1 : rec_syn.nr
+    for it = 1 : rec_syn.nt
+        residue.p[it,ir] = rec_syn.p[it,ir] - rec_obs.p[it,ir]
+    end
+end
+SeisPlotTX(residue.p, pclip=98);
 
 
-pz = zeros(params.data_format, params.nz * params.nx);
-px = zeros(params.data_format, params.nz * params.nx);
-spt = read_one_snapshot(path_spt, 300);
+# test the adjoint wavefield pz=px
+path_adj = joinpath(homedir(), "Desktop/adjoint.rsb");
+multi_step_adjoint!(path_adj, residue, params; save_flag="snapshot")
+
+(hdr, d) = read_RSdata(path_adj);
+d = reshape(d, hdr.n1*hdr.n2, hdr.n3, hdr.n4);
+tmp= zeros(1)
+for it = 1 : hdr.n4
+    for i = 1 : length(params.spt2wfd)
+        j = params.spt2wfd[i]
+        tmp[1] = tmp[1] + (d[j,3,it] - d[j,4,it])^2
+    end
+    println("$it")
+end
+
+pz = zeros(params.nz * params.nx);
+px = zeros(params.nz * params.nx);
+it = 1
 for i = 1 : length(params.spt2wfd)
     j = params.spt2wfd[i]
-    pz[i] = spt.pz[j]
-    px[i] = spt.px[j]
+    pz[i] = d[j,3,it]
+    px[i] = d[j,4,it]
 end
 pz = reshape(pz, params.nz, params.nx);
 px = reshape(px, params.nz, params.nx);
+SeisPlotTX(pz, wbox=6, hbox=2);
+SeisPlotTX(px, wbox=6, hbox=2);
 
-figure(); imshow(pz, cmap="seismic")
-figure(); imshow(px, cmap="seismic")
+
+
+
+# compute the gradient with respect to velocity
+@time g = bulk_gradient(residue, path_bnd, path_wfd, src, params);
+g = reshape(g, params.nz, params.nx);
+SeisPlotTX(g, pclip=98, wbox=9, hbox=3);
+tmp = -g[:,150]; tmp[1:10] .= 0.0;
+figure(); plot(tmp)
+
+# numerical gradient
+
+
+
+
+# forward modeling and save the pressure field to hard drive
+path_pre = joinpath(homedir(), "Desktop/pressure.rsb");
+multi_step_forward!(path_pre, src, params);
+# multi_step_forward!(path_pre, srcs, params);
+
+(hdr, pre0) = read_RSdata(path_pre);
+
+# reconstruct the pressure field forward
+@time pre1 = pressure_reconstruct_forward(path_bnd, src, params);
+# @time pre1 = pressure_reconstruct_forward(path_bnd, srcs, params);
+
+# reconstruct the pressure field backward
+@time pre2 = pressure_reconstruct_backward(path_bnd, path_wfd, src, params);
+# @time pre2 = pressure_reconstruct_backward(path_bnd, path_wfd, srcs, params);
+
+norm(pre0-pre1) / norm(pre0)
+norm(pre0-pre2) / norm(pre0)
 
 # # test the adjoint operator
 # irx = collect(1:2:params.nx);
@@ -108,9 +154,6 @@ figure(); imshow(px, cmap="seismic")
 #
 # tmp1 = dot(p, src.p)
 # tmp2 = dot(vec(rec.p), vec(rec1.p))
-
-
-
 
 # test the one-step adjoint operator
 spt1_f = Snapshot(params);
@@ -181,24 +224,3 @@ for i = 1 : length(params.spt2wfd)
 end
 pz = reshape(pz, params.nz, params.nx)
 px = reshape(px, params.nz, params.nx)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#

@@ -60,6 +60,20 @@ function sample_spt2wfd(spt::Snapshot, params::ModelParams)
 end
 
 """
+   sample the adjoint snapshot to get the pressure field and field at boundary part are cropped
+"""
+function sample_adjoint2pre!(p::Vector{Tv}, spt::Snapshot,
+         params::ModelParams) where {Tv <: AbstractFloat}
+
+    i = 0
+    for j in params.spt2wfd
+        i = i + 1
+        p[i] = spt.pz[j] # pz = px = p/2 inside the modeling area
+    end
+    return nothing
+end
+
+"""
    Create header of regularly sampled data for snapshot
 """
 function snapshot_header(params::ModelParams)
@@ -321,19 +335,16 @@ function WavefieldBound(params::ModelParams; step_flag=1)
     # length of boundary elements for one time step
     N = length(params.spt2bnd)
 
-    # the one extra time step is used for computing the time derivative of the source-side wavefield
-    nt= params.nt + 1
-
     # initialize empty struct
-    if flag == 1
+    if step_flag == 1
        return WavefieldBound(zeros(params.data_format, N),
                              zeros(params.data_format, N),
                              zeros(params.data_format, N))
 
-    elseif flag == 2
-       return WavefieldBound(zeros(params.data_format, N, nt),
-                             zeros(params.data_format, N, nt),
-                             zeros(params.data_format, N, nt))
+    elseif step_flag == 2
+       return WavefieldBound(zeros(params.data_format, N, params.nt),
+                             zeros(params.data_format, N, params.nt),
+                             zeros(params.data_format, N, params.nt))
     else
        error("non-supported flag, set flag=1 include all time steps, flag=2 just one time step")
     end
@@ -433,8 +444,17 @@ end
 """
   update the content in WavefieldBound, specifically
 """
-function read_one_boundary!(bnd::WavefieldBound, fid::IOStream)
+function read_one_boundary!(bnd::WavefieldBound, fid::IOStream,
+         it::Int64, params::ModelParams)
 
+    # byte length of one boundary
+    byte_length = length(params.spt2bnd) * sizeof(params.data_format) * 3
+
+    # location of file pointer
+    location = field_location[:data] + byte_length * (it-1)
+    seek(fid, location)
+
+    # read the boundary value
     read!(fid, bnd.vz)
     read!(fid, bnd.vx)
     read!(fid, bnd.p )
