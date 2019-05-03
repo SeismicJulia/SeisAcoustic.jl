@@ -2,7 +2,7 @@
    compute the partial derivative in vertical direction
 """
 function vertical_partial_derivative!(r::Vector{Tv}, p::Vector{Tv}, dpdz::SparseMatrixCSC{Tv,Ti},
-         nz::Ti, nx::Ti, tmp1::Vector{Tv}, tmp2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
+         nz::Ti, nx::Ti, tmp1::Vector{Tv}, tmp2::Vector{Tv}; iflag=1) where {Ti<:Int64, Tv<:AbstractFloat}
 
     istart = 1
     for ix = 1 : nx
@@ -11,12 +11,16 @@ function vertical_partial_derivative!(r::Vector{Tv}, p::Vector{Tv}, dpdz::Sparse
         copyto!(tmp1, 1, p, istart, nz)
 
         # main part
-        A_mul_b!(tmp2, dpdz, tmp1)
+        if iflag == 1
+           A_mul_b!(tmp2, dpdz, tmp1)
+        elseif iflag == 2
+           At_mul_b!(tmp2, dpdz, tmp1)
+        end
 
         # save the result
         copyto!(r, istart, tmp2, 1, nz)
 
-        # prepart for next column
+        # prepare for next column
         istart = istart + nz
     end
 
@@ -27,7 +31,7 @@ end
    compute the partial derivative in horizontal direction
 """
 function horizontal_partial_derivative!(r::Vector{Tv}, p::Vector{Tv}, dpdx::SparseMatrixCSC{Tv,Ti},
-         nz::Ti, nx::Ti, tmp1::Vector{Tv}, tmp2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
+         nz::Ti, nx::Ti, tmp1::Vector{Tv}, tmp2::Vector{Tv}; iflag=1) where {Ti<:Int64, Tv<:AbstractFloat}
 
     for iz = 1 : nz
 
@@ -35,7 +39,11 @@ function horizontal_partial_derivative!(r::Vector{Tv}, p::Vector{Tv}, dpdx::Spar
         BLAS.blascopy!(nx, pointer(p)+sizeof(Tv)*(iz-1), nz, tmp1, 1)
 
         # main part
-        A_mul_b!(tmp_x2, params.dpdx, tmp_x1)
+        if iflag == 1
+           A_mul_b!(tmp2, dpdx, tmp1)
+        elseif iflag == 2
+           At_mul_b!(tmp2, dpdx, tmp1)
+        end
 
         # save the result
         BLAS.blascopy!(nx, tmp2, 1, pointer(r)+sizeof(Tv)*(iz-1), nz)
@@ -45,21 +53,23 @@ function horizontal_partial_derivative!(r::Vector{Tv}, p::Vector{Tv}, dpdx::Spar
     return nothing
 end
 
-
+"""
+   one step forward modelling
+"""
 function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::ModelParams{Ti,Tv},
-         tmp_a1::Vector{Tv}, tmp_a2::Vector{Tv},
          tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
          tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
 
-    # update vz column-by-column
     for ix = 1 : params.Nx
         ilower = (ix-1) * params.Nz + 1
         iupper = ilower + params.Nz - 1
+
         idx    = 0
         for iz = ilower : iupper
             idx= idx + 1
             tmp_z1[idx] = spt1.pz[iz] + spt1.px[iz]  # p1 = pz1 + px1
         end
+
         A_mul_b!(tmp_z2, params.dpdz, tmp_z1)        # dpdz
         idx    = 0
         for iz = ilower : iupper
@@ -67,16 +77,18 @@ function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::Model
             spt2.vz[iz] = params.MvzBvz[idx]*spt1.vz[iz] + params.MvzBp[iz]*tmp_z2[idx]
         end
     end
-    # sum
 
     # update vx row-by-row
     for iz = 1 : params.Nz
+
         idx = iz
         for ix = 1 : params.Nx
             tmp_x1[ix] = spt1.pz[idx] + spt1.px[idx] # p1 = pz1 + px1
             idx= idx + params.Nz
         end
+
         A_mul_b!(tmp_x2, params.dpdx, tmp_x1)         # dpdx
+
         idx = iz
         for ix = 1 : params.Nx
             spt2.vx[idx] = params.MvxBvx[ix]*spt1.vx[idx] + params.MvxBp[idx]*tmp_x2[ix]
@@ -88,12 +100,15 @@ function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::Model
     for ix = 1 : params.Nx
         ilower = (ix-1) * params.Nz + 1
         iupper = ilower + params.Nz - 1
+
         idx    = 0
         for iz = ilower : iupper
             idx= idx + 1
             tmp_z1[idx] = spt2.vz[iz]
         end
+
         A_mul_b!(tmp_z2, params.dvdz, tmp_z1)        # dpdz
+
         idx    = 0
         for iz = ilower : iupper
             idx = idx + 1
@@ -103,12 +118,15 @@ function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::Model
 
     # update px row-by-row
     for iz = 1 : params.Nz
+
         idx = iz
         for ix = 1 : params.Nx
             tmp_x1[ix] = spt2.vx[idx]
             idx= idx + params.Nz
         end
+
         A_mul_b!(tmp_x2, params.dvdx, tmp_x1)         # dvdx
+
         idx = iz
         for ix = 1 : params.Nx
             spt2.px[idx] = params.MpxBpx[ix]*spt1.px[idx] + params.MpxBvx[idx]*tmp_x2[ix]
@@ -274,7 +292,7 @@ function multi_step_forward!(rec::Recordings, src::Source, params::ModelParams;
 
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         add_source!(spt2, src, it)
-        sample_spt2rec!(rec, spt1, it)
+        sample_spt2rec!(rec, spt2, it)
 
         # save boundary of wavefield
         if path_bnd != "NULL"
@@ -370,12 +388,15 @@ function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield,
     for ix = 1 : params.nx
         ilower = (ix-1) * params.nz + 1
         iupper = ilower + params.nz - 1
+
         idx    = 0
         for iz = ilower : iupper
             idx= idx + 1
             tmp_z1[idx] = wfd1.p[iz]
         end
+
         A_mul_b!(tmp_z2, params.rpdz, tmp_z1)        # dpdz
+
         idx    = 0
         for iz = ilower : iupper
             idx = idx + 1
@@ -385,12 +406,15 @@ function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield,
 
     # update vx row-by-row
     for iz = 1 : params.nz
+
         idx = iz
         for ix = 1 : params.nx
             tmp_x1[ix] = wfd1.p[idx]
             idx= idx + params.nz
         end
+
         A_mul_b!(tmp_x2, params.rpdx, tmp_x1)         # dpdx
+
         idx = iz
         for ix = 1 : params.nx
             wfd2.vx[idx] = wfd1.vx[idx] + params.RvxBp[idx]*tmp_x2[ix]
@@ -409,30 +433,36 @@ function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield,
     for ix = 1 : params.nx
         ilower = (ix-1) * params.nz + 1
         iupper = ilower + params.nz - 1
+
         idx    = 0
         for iz = ilower : iupper
             idx= idx + 1
             tmp_z1[idx] = wfd2.vz[iz]
         end
+
         A_mul_b!(tmp_z2, params.rvdz, tmp_z1)        # dpdz
+
         idx    = 0
         for iz = ilower : iupper
             idx = idx + 1
-            wfd2.p[iz] = wfd1.p[iz] + params.RpzBvz[iz]*tmp_z2[idx]
+            wfd2.p[iz] = wfd1.p[iz] + params.RpBv[iz]*tmp_z2[idx]
         end
     end
 
     # update px row-by-row
     for iz = 1 : params.nz
+
         idx = iz
         for ix = 1 : params.nx
             tmp_x1[ix] = wfd2.vx[idx]
             idx= idx + params.nz
         end
+
         A_mul_b!(tmp_x2, params.rvdx, tmp_x1)         # dvdx
+
         idx = iz
         for ix = 1 : params.nx
-            wfd2.p[idx] = wfd2.p[idx] + params.RpxBvx[idx]*tmp_x2[ix]
+            wfd2.p[idx] = wfd2.p[idx] + params.RpBv[idx]*tmp_x2[ix]
             idx= idx + params.nz
         end
     end
@@ -574,6 +604,114 @@ function pressure_reconstruct_forward(path_bnd::Ts, srcs::Vector{Source},
     close(fid_bnd)
     return reshape(pre, params.nz, params.nx, params.nt)
 end
+
+# function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield,
+#          bnd::WavefieldBound, params::ModelParams,
+#          tmp_a1::Vector{Tv}, tmp_a2::Vector{Tv},
+#          tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
+#          tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
+#
+#     # total number of field elements
+#     N = params.nz * params.nx
+#
+#     # partial derivative in vertical direction
+#     vertical_partial_derivative!(tmp_a1, wfd1.p, params.rpdz,
+#     params.nz, params.nx, tmp_z1, tmp_z2)
+#
+#     # partial derivative in horizontal direction
+#     horizontal_partial_derivative!(tmp_a2, wfd1.p, params.rpdx,
+#     params.nz, params.nx, tmp_x1, tmp_x2)
+#
+#     # update vz
+#     for i = 1 : N
+#         wfd2.vz[i] = wfd1.vz[i] + params.RvzBp[i]*tmp_a1[i]
+#         wfd2.vx[i] = wfd1.vx[i] + params.RvxBp[i]*tmp_a2[i]
+#     end
+#
+#     # correct for boundary part
+#     for i = 1 : length(params.bnd2wfd)
+#         j = params.bnd2wfd[i]
+#         wfd2.vz[j] = bnd.vz[i]
+#         wfd2.vx[j] = bnd.vx[i]
+#     end
+#
+#     # partial derivative in vertical direction
+#     vertical_partial_derivative!(tmp_a1, wfd2.vz, params.rvdz,
+#     params.nz, params.nx, tmp_z1, tmp_z2)
+#
+#     # partial derivative in horizontal direction
+#     horizontal_partial_derivative!(tmp_a2, wfd2.vx, params.rvdx,
+#     params.nz, params.nx, tmp_x1, tmp_x2)
+#
+#     # update for pressure
+#     for i = 1 : N
+#         wfd2.p[i] = wfd1.p[i] + params.RpBv[i] * (tmp_a1[i] + tmp_a2[i])
+#     end
+#
+#     # correct for boundary part
+#     for i = 1 : length(params.bnd2wfd)
+#         j = params.bnd2wfd[i]
+#         wfd2.p[j] = bnd.p[i]
+#     end
+#
+#     return nothing
+# end
+
+# function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::ModelParams{Ti,Tv},
+#          tmp_a1::Vector{Tv}, tmp_a2::Vector{Tv},
+#          tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
+#          tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
+#
+#     # sum pz and px
+#     copyto!(tmp_a1, spt1.pz)
+#     axpy!(1.0, spt1.px, tmp_a1)
+#
+#     # partial derivative in vertical direction
+#     vertical_partial_derivative!(tmp_a2, tmp_a1, params.dpdz,
+#     params.Nz, params.Nx, tmp_z1, tmp_z2)
+#
+#     # update vz
+#     idx = 0
+#     for ix = 1 : params.Nx
+#         for iz = 1 : params.Nz
+#             idx = idx + 1
+#             spt2.vz[idx] = params.MvzBvz[iz]*spt1.vz[idx] + params.MvzBp[idx]*tmp_a2[idx]
+#         end
+#     end
+#
+#     # partial derivative in vertical direction
+#     horizontal_partial_derivative!(tmp_a2, tmp_a1, params.dpdx,
+#     params.Nz, params.Nx, tmp_x1, tmp_x2)
+#
+#     # update vx
+#     idx = 0
+#     for ix = 1 : params.Nx
+#         for iz = 1 : params.Nz
+#             idx = idx + 1
+#             spt2.vx[idx] = params.MvxBvx[ix]*spt1.vx[idx] + params.MvxBp[idx]*tmp_a2[idx]
+#         end
+#     end
+#
+#     # partial derivative of vz in vertical direction
+#     vertical_partial_derivative!(tmp_a1, spt2.vz, params.dvdz,
+#     params.Nz, params.Nx, tmp_z1, tmp_z2)
+#
+#     # partial derivative of vx in horizontal direction
+#     horizontal_partial_derivative!(tmp_a2, spt2.vx, params.dvdx,
+#     params.Nz, params.Nx, tmp_x1, tmp_x2)
+#
+#     # update pz and px
+#     idx = 0
+#     for ix = 1 : params.Nx
+#         for iz = 1 : params.Nz
+#             idx = idx + 1
+#             spt2.pz[idx] = params.MpzBpz[iz]*spt1.pz[idx] + params.MpzBvz[idx]*tmp_a1[idx]
+#             spt2.px[idx] = params.MpxBpx[ix]*spt1.px[idx] + params.MpxBvx[idx]*tmp_a2[idx]
+#         end
+#     end
+#
+#     return nothing
+# end
 
 # """
 #    compute recordings with a single source

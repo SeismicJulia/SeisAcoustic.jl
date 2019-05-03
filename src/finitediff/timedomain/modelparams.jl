@@ -80,12 +80,11 @@ struct ModelParams{Ti<:Int64, Tv<:AbstractFloat}
     rpdx         :: SparseMatrixCSC{Tv,Ti}
     MpzBpz       :: Vector{Tv}
     MpzBvz       :: Vector{Tv}
-    RpzBvz       :: Vector{Tv}
     dvdz         :: SparseMatrixCSC{Tv,Ti}
     rvdz         :: SparseMatrixCSC{Tv,Ti}
     MpxBpx       :: Vector{Tv}
     MpxBvx       :: Vector{Tv}
-    RpxBvx       :: Vector{Tv}
+    RpBv         :: Vector{Tv}
     dvdx         :: SparseMatrixCSC{Tv,Ti}
     rvdx         :: SparseMatrixCSC{Tv,Ti}
 end
@@ -492,8 +491,7 @@ function ModelParams(rho, vel, free_surface::Bool, dz, dx, dt, tmax;
     # FD stencil with rigid boundaries
     (RvzBp , rpdz) = Rvz(buoy0, dz, dt, fd_coefficients)
     (RvxBp , rpdx) = Rvx(buoy0, dx, dt, fd_coefficients)
-    (RpzBvz, rvdz) = Rpz(bulk0, dz, dt, fd_coefficients)
-    (RpxBvx, rvdx) = Rpx(bulk0, dx, dt, fd_coefficients)
+    (RpBv, rvdz, rvdx) = Rpzx(bulk0, dz, dx, dt, fd_coefficients)
 
     # call the default struct constructor
     return ModelParams(data_format, nz, nx, npml, free_surface, Nz, Nx, ntop,
@@ -501,8 +499,8 @@ function ModelParams(rho, vel, free_surface::Bool, dz, dx, dt, tmax;
                        dz, dx, dt, tmax, nt, rho, vel,
                        MvzBvz, MvzBp , RvzBp , dpdz, rpdz,
                        MvxBvx, MvxBp , RvxBp , dpdx, rpdx,
-                       MpzBpz, MpzBvz, RpzBvz, dvdz, rvdz,
-                       MpxBpx, MpxBvx, RpxBvx, dvdx, rvdx)
+                       MpzBpz, MpzBvz,         dvdz, rvdz,
+                       MpxBpx, MpxBvx, RpBv  , dvdx, rvdx)
 end
 
 

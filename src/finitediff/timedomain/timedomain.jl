@@ -67,6 +67,8 @@ export get_gamma_profile,
        A_mul_b!,
        At_mul_b!,
 # ============= forward time stepping =============
+       vertical_partial_derivative!,
+       horizontal_partial_derivative!,
        one_step_forward!,
        multi_step_forward!,
        pressure_reconstruct_forward,

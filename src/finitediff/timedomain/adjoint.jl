@@ -167,6 +167,50 @@ function multi_step_adjoint!(path::String, rec::Recordings, params::ModelParams;
 end
 
 """
+   the adjoint operator of one point source simulation, only used for testing the
+dot product test
+"""
+function multi_step_adjoint!(rec::Recordings, src::Source, params::ModelParams)
+
+    # initialize intermediate variables
+    spt1 = Snapshot(params)
+    spt2 = Snapshot(params)
+    tmp  = zeros(params.data_format, params.Nz * params.Nx)
+    tmp_z1 = zeros(params.data_format, params.Nz)
+    tmp_z2 = zeros(params.data_format, params.Nz)
+    tmp_x1 = zeros(params.data_format, params.Nx)
+    tmp_x2 = zeros(params.data_format, params.Nx)
+
+    # inject the recordings to the last snapshot
+    inject_rec2spt!(spt2, rec, params.nt)
+
+    # the time range of source function
+    p   = zeros(params.data_format, src.it_max - src.it_min + 1)
+    idx = src.src2spt
+
+    if src.it_min <= params.nt <= src.it_max
+       i = params.nt - src.it_min + 1
+       p[i] = spt2.px[idx] * src.dt
+    end
+
+    # back propagation
+    for it = params.nt-1 : -1 : 1
+
+        one_step_adjoint!(spt1, spt2, params, tmp, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+        inject_rec2spt!(spt1, rec, it)
+
+        if src.it_min <= it <= src.it_max
+           i = it - src.it_min + 1
+           p[i] = spt1.px[idx] * src.dt
+        end
+
+        copy_snapshot!(spt2, spt1)
+    end
+
+    return p
+end
+
+"""
    one step backward reconstruction of wave field from the boundary values, the boundary
 wavefield at only one time step is provided
 """
@@ -191,7 +235,7 @@ function one_step_backward!(wfd2::Wavefield, wfd1::Wavefield,
         idx    = 0
         for iz = ilower : iupper
             idx = idx + 1
-            wfd2.p[iz] = wfd1.p[iz] - params.RpzBvz[iz]*tmp_z2[idx]
+            wfd2.p[iz] = wfd1.p[iz] - params.RpBv[iz]*tmp_z2[idx]
         end
     end
 
@@ -208,7 +252,7 @@ function one_step_backward!(wfd2::Wavefield, wfd1::Wavefield,
 
         idx = iz
         for ix = 1 : params.nx
-            wfd2.p[idx] = wfd2.p[idx] - params.RpxBvx[idx]*tmp_x2[ix]
+            wfd2.p[idx] = wfd2.p[idx] - params.RpBv[idx]*tmp_x2[ix]
             idx= idx + params.nz
         end
     end
@@ -372,50 +416,6 @@ function pressure_reconstruct_backward(path_bnd::Ts, path_wfd::Ts,
     close(fid_bnd)
     return reshape(pre, params.nz, params.nx, params.nt)
 end
-
-# """
-#    the adjoint operator of one point source simulation, only used for testing the
-# dot product test
-# """
-# function multi_step_adjoint!(rec::Recordings, src::Source, params::ModelParams)
-#
-#     # initialize intermediate variables
-#     spt1 = Snapshot(params)
-#     spt2 = Snapshot(params)
-#     tmp  = zeros(params.data_format, params.Nz * params.Nx)
-#     tmp_z1 = zeros(params.data_format, params.Nz)
-#     tmp_z2 = zeros(params.data_format, params.Nz)
-#     tmp_x1 = zeros(params.data_format, params.Nx)
-#     tmp_x2 = zeros(params.data_format, params.Nx)
-#
-#     # inject the recordings to the last snapshot
-#     inject_rec2spt!(spt2, rec, params.nt)
-#
-#     # the time range of source function
-#     p   = zeros(params.data_format, src.it_max - src.it_min + 1)
-#     idx = src.src2spt
-#
-#     if src.it_min <= params.nt <= src.it_max
-#        i = params.nt - src.it_min + 1
-#        p[i] = spt2.px[idx] * params.dt
-#     end
-#
-#     # back propagation
-#     for it = params.nt-1 : -1 : 1
-#
-#         one_step_adjoint!(spt1, spt2, params, tmp, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
-#         inject_rec2spt!(spt1, rec, it)
-#
-#         if src.it_min <= it <= src.it_max
-#            i = it - src.it_min + 1
-#            p[i] = spt1.px[idx] * params.dt
-#         end
-#
-#         copy_snapshot!(spt2, spt1)
-#     end
-#
-#     return p
-# end
 
 # """
 #    one step backward reconstruction of wave field from the boundary values

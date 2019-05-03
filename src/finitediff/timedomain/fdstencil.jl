@@ -37,8 +37,7 @@ function Mvz(gammaz_stagger::Vector{Tv}, buoy::Matrix{Tv},
                bavg = buoy[i,j]
             end
 
-            MvzBp[idx] = (double*bavg) / (double+dt*gammaz_stagger[i])
-            MvzBp[idx] = MvzBp[idx] * dt / dz
+            MvzBp[idx] = (double * bavg * dt) / (double+dt*gammaz_stagger[i])
         end
     end
 
@@ -51,10 +50,10 @@ function Mvz(gammaz_stagger::Vector{Tv}, buoy::Matrix{Tv},
         for ic = lower : upper
             if ic-ir <= 0
                idx = ir-ic + 1
-               dpdz[ir,ic] = - fd[idx]
+               dpdz[ir,ic] = - fd[idx] / dz
             elseif ic-ir >= 1
                idx = ic-ir
-               dpdz[ir,ic] =   fd[idx]
+               dpdz[ir,ic] =   fd[idx] / dz
             end
         end
     end
@@ -91,7 +90,7 @@ function Rvz(buoy::Matrix{Tv}, dz::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:Abstra
                bavg = buoy[i,j]
             end
 
-            RvzBp[idx] = bavg * dt / dz
+            RvzBp[idx] = bavg * dt
         end
     end
 
@@ -104,10 +103,10 @@ function Rvz(buoy::Matrix{Tv}, dz::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:Abstra
         for ic = lower : upper
             if ic-ir <= 0
                idx = ir-ic + 1
-               rpdz[ir,ic] = - fd[idx]
+               rpdz[ir,ic] = - fd[idx] / dz
             elseif ic-ir >= 1
                idx = ic-ir
-               rpdz[ir,ic] =   fd[idx]
+               rpdz[ir,ic] =   fd[idx] / dz
             end
         end
     end
@@ -154,8 +153,7 @@ function Mvx(gammax_stagger::Vector{Tv}, buoy::Matrix{Tv},
                bavg = buoy[i,j]
             end
 
-            MvxBp[idx] = (double*bavg) / (double+dt*gammax_stagger[j])
-            MvxBp[idx] = MvxBp[idx] * dt / dx
+            MvxBp[idx] = (double * bavg * dt) / (double + dt * gammax_stagger[j])
         end
     end
 
@@ -168,10 +166,10 @@ function Mvx(gammax_stagger::Vector{Tv}, buoy::Matrix{Tv},
         for ic = lower : upper
             if ic-ir <= 0
                idx = ir - ic + 1
-               dpdx[ir,ic] = - fd[idx]
+               dpdx[ir,ic] = - fd[idx] / dx
             elseif ic-ir >= 1
                idx = ic - ir
-               dpdx[ir,ic] =   fd[idx]
+               dpdx[ir,ic] =   fd[idx] / dx
             end
         end
     end
@@ -208,7 +206,7 @@ function Rvx(buoy::Matrix{Tv}, dx::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:Abstra
                bavg = buoy[i,j]
             end
 
-            RvxBp[idx] = bavg * dt / dx
+            RvxBp[idx] = bavg * dt
         end
     end
 
@@ -221,10 +219,10 @@ function Rvx(buoy::Matrix{Tv}, dx::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:Abstra
         for ic = lower : upper
             if ic-ir <= 0
                idx = ir - ic + 1
-               rpdx[ir,ic] = - fd[idx]
+               rpdx[ir,ic] = - fd[idx] / dx
             elseif ic-ir >= 1
                idx = ic - ir
-               rpdx[ir,ic] =   fd[idx]
+               rpdx[ir,ic] =   fd[idx] / dx
             end
         end
     end
@@ -263,8 +261,7 @@ function Mpz(gammaz_integer::Vector{Tv}, bulk::Matrix{Tv},
     for j = 1 : nx
         for i = 1 : nz
             idx = idx + 1
-            MpzBvz[idx] = (double * bulk[i,j]) / (double+dt*gammaz_integer[i])
-            MpzBvz[idx] = MpzBvz[idx] * dt / dz
+            MpzBvz[idx] = (double * bulk[i,j] * dt) / (double + dt * gammaz_integer[i])
         end
     end
 
@@ -277,60 +274,15 @@ function Mpz(gammaz_integer::Vector{Tv}, bulk::Matrix{Tv},
         for ic = lower : upper
             if ic-ir <= -1
                idx = ir-ic
-               dvdz[ir,ic] = - fd[idx]
+               dvdz[ir,ic] = - fd[idx] / dz
             elseif ic-ir >= 0
                idx = ic-ir+1
-               dvdz[ir,ic] =   fd[idx]
+               dvdz[ir,ic] =   fd[idx] / dz
             end
         end
     end
 
     return MpzBpz, MpzBvz, sparse(dvdz)
-end
-
-"""
-   Define the partial derivative operator for p_z with rigid boundary
-"""
-function Rpz(bulk::Matrix{Tv}, dz::Tv, dt::Tv, fd::Vector) where {Tv<:AbstractFloat}
-
-    # size of the model
-    (nz, nx) = size(bulk)
-
-    # precision order
-    order = length(fd)
-
-    # data format
-    data_format = eltype(bulk)
-    double      = data_format(2.0)
-
-    # the coefficients in front of v_z
-    RpzBvz = ones(data_format, nz*nx)
-    idx = 0
-    for j = 1 : nx
-        for i = 1 : nz
-            idx = idx + 1
-            RpzBvz[idx] = bulk[i,j] * dt / dz
-        end
-    end
-
-    # spatial partial derivative dvdz
-    rvdz = zeros(data_format, nz, nz)
-    for ir = 1 : nz
-        lower = ir - order     >= 1  ? ir-order   : 1
-        upper = ir + order - 1 <= nz ? ir+order-1 : nz
-
-        for ic = lower : upper
-            if ic-ir <= -1
-               idx = ir-ic
-               rvdz[ir,ic] = - fd[idx]
-            elseif ic-ir >= 0
-               idx = ic-ir+1
-               rvdz[ir,ic] =   fd[idx]
-            end
-        end
-    end
-
-    return RpzBvz, sparse(rvdz)
 end
 
 """
@@ -364,8 +316,7 @@ function Mpx(gammax_integer::Vector{Tv}, bulk::Matrix{Tv},
     for j = 1 : nx
         for i = 1 : nz
             idx = idx + 1
-            MpxBvx[idx] = (double * bulk[i,j]) / (double+dt*gammax_integer[j])
-            MpxBvx[idx] = MpxBvx[idx] * dt / dx
+            MpxBvx[idx] = (double * bulk[i,j] * dt) / (double + dt * gammax_integer[j])
         end
     end
 
@@ -378,10 +329,10 @@ function Mpx(gammax_integer::Vector{Tv}, bulk::Matrix{Tv},
         for ic = lower : upper
             if ic-ir <= -1
                idx = ir - ic
-               dvdx[ir,ic] = - fd[idx]
+               dvdx[ir,ic] = - fd[idx] / dx
             elseif ic-ir >= 0
                idx = ic - ir + 1
-               dvdx[ir,ic] =   fd[idx]
+               dvdx[ir,ic] =   fd[idx] / dx
             end
         end
     end
@@ -390,9 +341,9 @@ function Mpx(gammax_integer::Vector{Tv}, bulk::Matrix{Tv},
 end
 
 """
-   Define the partial derivative operator for p_x with rigid boundary
+   Define the partial derivative operator for p_z with rigid boundary
 """
-function Rpx(bulk::Matrix{Tv}, dx::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:AbstractFloat}
+function Rpzx(bulk::Matrix{Tv}, dz::Tv, dx::Tv, dt::Tv, fd::Vector) where {Tv<:AbstractFloat}
 
     # size of the model
     (nz, nx) = size(bulk)
@@ -404,13 +355,30 @@ function Rpx(bulk::Matrix{Tv}, dx::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:Abstra
     data_format = eltype(bulk)
     double      = data_format(2.0)
 
-    # the coefficients in front of v_x
-    RpxBvx = ones(data_format, nz*nx)
+    # the coefficients in front of v_z
+    RpBv = ones(data_format, nz*nx)
     idx = 0
     for j = 1 : nx
         for i = 1 : nz
             idx = idx + 1
-            RpxBvx[idx] = bulk[i,j] * dt / dx
+            RpBv[idx] = bulk[i,j] * dt
+        end
+    end
+
+    # spatial partial derivative dvdz
+    rvdz = zeros(data_format, nz, nz)
+    for ir = 1 : nz
+        lower = ir - order     >= 1  ? ir-order   : 1
+        upper = ir + order - 1 <= nz ? ir+order-1 : nz
+
+        for ic = lower : upper
+            if ic-ir <= -1
+               idx = ir-ic
+               rvdz[ir,ic] = - fd[idx] / dz
+            elseif ic-ir >= 0
+               idx = ic-ir+1
+               rvdz[ir,ic] =   fd[idx] / dz
+            end
         end
     end
 
@@ -423,15 +391,15 @@ function Rpx(bulk::Matrix{Tv}, dx::Tv, dt::Tv, fd::Vector{Tv}) where {Tv<:Abstra
         for ic = lower : upper
             if ic-ir <= -1
                idx = ir - ic
-               rvdx[ir,ic] = - fd[idx]
+               rvdx[ir,ic] = - fd[idx] / dx
             elseif ic-ir >= 0
                idx = ic - ir + 1
-               rvdx[ir,ic] =   fd[idx]
+               rvdx[ir,ic] =   fd[idx] / dx
             end
         end
     end
 
-    return RpxBvx, sparse(rvdx)
+    return RpBv, sparse(rvdz), sparse(rvdx)
 end
 
 # """
