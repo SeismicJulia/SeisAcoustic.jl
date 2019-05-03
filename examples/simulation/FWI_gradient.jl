@@ -57,25 +57,18 @@ write_RSdata(path_sfd, hdr, pre);
 path_sfd1 = joinpath(homedir(), "Desktop/sfd_forward.rsb");
 get_sourceside_wavefield(path_sfd1, src, params);
 
+path_sfd2 = joinpath(homedir(), "Desktop/sfd_ground.rsb");
+get_wavefield(path_sfd2, src, params);
+
 (hdr, pre0) = read_RSdata(path_sfd);
 (hdr, pre1) = read_RSdata(path_sfd1);
+(hdr, pre2) = read_RSdata(path_sfd2);
 norm(pre0 - pre1) / norm(pre0);
+norm(pre0 - pre2) / norm(pre0);
 
-SeisPlotTX(pre0[:,:,200], cmap="seismic", wbox=9, hbox=3);
-SeisPlotTX(pre1[:,:,200], cmap="seismic", wbox=9, hbox=3);
-
-
-
-
-
-
-
-
-
-
-
-
-
+figure(figsize=(9,3)); imshow(pre0[:,:,200], cmap="seismic");
+figure(figsize=(9,3)); imshow(pre1[:,:,200], cmap="seismic");
+figure(figsize=(9,3)); imshow(pre2[:,:,200], cmap="seismic");
 
 # true velocity model
 vel1 = copy(vel);
