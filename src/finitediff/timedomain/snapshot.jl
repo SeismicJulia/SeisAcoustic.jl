@@ -541,7 +541,7 @@ function reverse_order(path::String, path_tmp::String; save_flag="snapshot")
        nt= hdr.n4
     elseif save_flag == "pressure"
        N = hdr.n1 * hdr.n2
-       nt= hdr.n2
+       nt= hdr.n3
     end
 
     elength = sizeof(hdr.data_format) * N

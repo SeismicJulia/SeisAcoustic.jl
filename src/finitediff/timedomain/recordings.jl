@@ -44,9 +44,18 @@ function Recordings(rz::Vector, rx::Vector,
 
     # error checking
     for i = 1 : nr
-        if irz[i] > params.nz || irx[i] > params.nx
+        if irz[i] > params.nz || irx[i] > params.nx || irz[i] < 1 || irx[i] < 1
            error("receiver located outside of modeling area")
         end
+    end
+
+    # can't put receivers on the free surface
+    if params.free_surface
+       for i = 1 : nr
+           if irz[i] == 1
+              error("can't put receiver at free surface, move it deeper")
+           end
+       end
     end
 
     # the auxillary vector mapping snapshot to recordings

@@ -283,3 +283,65 @@ function get_wavefield(path_sfd::String, src::Source, params::ModelParams)
 
     return nothing
 end
+
+"""
+   get vz and vx
+"""
+function get_dvdzx(path_vz::String, path_vx::String, src::Source, params::ModelParams)
+
+    N  = params.nz * params.nx
+
+    # initialize variables for time stepping
+    spt1 = Snapshot(params)
+    spt2 = Snapshot(params)
+    tmp_z1 = zeros(params.data_format, params.Nz)
+    tmp_z2 = zeros(params.data_format, params.Nz)
+    tmp_x1 = zeros(params.data_format, params.Nx)
+    tmp_x2 = zeros(params.data_format, params.Nx)
+
+    # save the result
+    p = zeros(params.data_format, N)
+    rz= zeros(params.data_format, params.Nz * params.Nx)
+    rx= zeros(params.data_format, params.Nz * params.Nx)
+
+    # save dvdz
+    hdr = RegularSampleHeader(n1=params.Nz, n2=params.Nx, n3=params.nt-1,
+          data_format=params.data_format, title="dvdz")
+    fid_vz = write_RSheader(path_vz, hdr)
+
+    # save dvdx
+    hdr = RegularSampleHeader(n1=params.Nz, n2=params.Nx, n3=params.nt-1,
+          data_format=params.data_format, title="dvdx")
+    fid_vx = write_RSheader(path_vx, hdr)
+
+    # add source to the first snapshot
+    add_source!(spt1, src, 1)
+
+    # loop over time stepping
+    for it = 2 : params.nt
+
+        one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+        add_source!(spt2, src, it)
+
+        # vertical partial derivative
+        vertical_partial_derivative!(rz, spt2.vz, params.dvdz, params.Nz, params.Nx,
+                                     tmp_z1, tmp_z2)
+
+        horizontal_partial_derivative!(rx, spt2.vx, params.dvdx, params.Nz, params.Nx,
+                                       tmp_x1, tmp_x2)
+
+        rz = rz * params.dt
+        rx = rx * params.dt
+
+        write(fid_vz, rz)
+        write(fid_vx, rx)
+
+        # prepare for next iteration
+        copy_snapshot!(spt1, spt2)
+    end
+
+    close(fid_vz)
+    close(fid_vx)
+
+    return nothing
+end

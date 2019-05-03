@@ -66,66 +66,102 @@ get_wavefield(path_sfd2, src, params);
 norm(pre0 - pre1) / norm(pre0);
 norm(pre0 - pre2) / norm(pre0);
 
-figure(figsize=(9,3)); imshow(pre0[:,:,200], cmap="seismic");
-figure(figsize=(9,3)); imshow(pre1[:,:,200], cmap="seismic");
-figure(figsize=(9,3)); imshow(pre2[:,:,200], cmap="seismic");
+it = 399
+SeisPlotTX(pre0[:,:,it], cmap="seismic", wbox=9, hbox=3)
+SeisPlotTX(pre1[:,:,it], cmap="seismic", wbox=9, hbox=3)
+SeisPlotTX(pre2[:,:,it], cmap="seismic", wbox=9, hbox=3)
 
-# true velocity model
-vel1 = copy(vel);
-vel1[51,151] = 3000*(1+1e-7);
+
+# ==============================================================================
+#                       check the correctness of gradient
+# ==============================================================================
+irx = collect(1:2:params.nx);
+irz = 2 * ones(length(irx));
+rec_obs = Recordings(irz, irx, params);
+
+# generate observations
+multi_step_forward!(rec_obs, src, params);
+SeisPlotTX(rec_obs.p, pclip=98, cmap="seismic");
+
+# initial velocity model as a homogeneous one
+vel1    = 3000 * ones(101, 301);  # m/s
+delta_m = 1e-7;            # velocity pertubation
+iz = 51; ix = 151;
+vel1[iz, ix] = vel1[iz,ix] + delta_m
+
 params1 = ModelParams(rho, vel1, free_surface, dz, dx, dt, tmax;
-          data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.)
+         data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
 
-rec_obs = Recordings(irz, irx, params1);
-
-# forward modeling of simultaneous sources
-multi_step_forward!(rec_obs, src, params1);
-SeisPlotTX(rec_obs.p, pclip=98);
+rec_syn = Recordings(irz, irx, params1);
+multi_step_forward!(rec_syn, src, params1);
 
 # compute the residue
-residue = Recordings(irz, irx, params);
+residue = Recordings(irz, irx, params1);
 for ir = 1 : rec_syn.nr
     for it = 1 : rec_syn.nt
         residue.p[it,ir] = rec_syn.p[it,ir] - rec_obs.p[it,ir]
     end
 end
-SeisPlotTX(residue.p, pclip=98);
+J_plus = norm(residue.p) / 2
 
 
-# test the adjoint wavefield pz=px
-path_adj = joinpath(homedir(), "Desktop/adjoint.rsb");
-multi_step_adjoint!(path_adj, residue, params; save_flag="snapshot")
+# pertubate velocity
+vel1[iz, ix] = vel1[iz,ix] - 2*delta_m
 
-(hdr, d) = read_RSdata(path_adj);
-d = reshape(d, hdr.n1*hdr.n2, hdr.n3, hdr.n4);
-tmp= zeros(1)
-for it = 1 : hdr.n4
-    for i = 1 : length(params.spt2wfd)
-        j = params.spt2wfd[i]
-        tmp[1] = tmp[1] + (d[j,3,it] - d[j,4,it])^2
+params1 = ModelParams(rho, vel1, free_surface, dz, dx, dt, tmax;
+         data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
+
+rec_syn = Recordings(irz, irx, params1);
+multi_step_forward!(rec_syn, src, params1);
+
+# compute the residue
+residue = Recordings(irz, irx, params1);
+for ir = 1 : rec_syn.nr
+    for it = 1 : rec_syn.nt
+        residue.p[it,ir] = rec_syn.p[it,ir] - rec_obs.p[it,ir]
     end
-    println("$it")
+end
+J_minus = norm(residue.p) / 2
+
+# compute gradient numerically
+g_num = (J_plus - J_minus) / (2 * delta_m)
+
+# compute the gradient analytically
+vel1    = 3000 * ones(101, 301);  # m/s
+
+params1 = ModelParams(rho, vel1, free_surface, dz, dx, dt, tmax;
+         data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
+
+rec_syn = Recordings(irz, irx, params1);
+multi_step_forward!(rec_syn, src, params1);
+
+# compute the residue
+residue = Recordings(irz, irx, params1);
+for ir = 1 : rec_syn.nr
+    for it = 1 : rec_syn.nt
+        residue.p[it,ir] = rec_syn.p[it,ir] - rec_obs.p[it,ir]
+    end
 end
 
-pz = zeros(params.nz * params.nx);
-px = zeros(params.nz * params.nx);
-it = 1
-for i = 1 : length(params.spt2wfd)
-    j = params.spt2wfd[i]
-    pz[i] = d[j,3,it]
-    px[i] = d[j,4,it]
+# save the adjoint wavefield
+path_adj = joinpath(homedir(), "Desktop/adj.rsb");
+multi_step_adjoint!(path_adj, residue, params1, save_flag="snapshot")
+(hdr, adj) = read_RSdata(path_adj)
+
+path_sfd = joinpath(homedir(), "Desktop/sfd_ground.rsb");
+get_wavefield(path_sfd, src, params1)
+(hdr, sfd) = read_RSdata(path_sfd)
+
+path_vz = joinpath(homedir(), "Desktop/dvdz.rsb");
+path_vx = joinpath(homedir(), "Desktop/dvdx.rsb");
+get_dvdzx(path_vz, path_vx, src, params1)
+(hdr, svz) = read_RSdata(path_vz)
+(hdr, svx) = read_RSdata(path_vx)
+
+g_ana = zeros(1)
+i1 = iz + params1.ntop
+i2 = ix + params1.npml
+for it = 1 : params.nt-1
+    g_ana[1] = g_ana[1] + svz[i1, i2, it] * adj[i1, i2, 3, it+1] + svx[i1, i2, it] * adj[i1, i2, 4, it+1]
 end
-pz = reshape(pz, params.nz, params.nx);
-px = reshape(px, params.nz, params.nx);
-SeisPlotTX(pz, wbox=6, hbox=2);
-SeisPlotTX(px, wbox=6, hbox=2);
-
-
-
-
-# compute the gradient with respect to velocity
-@time g = bulk_gradient(residue, path_bnd, path_wfd, src, params);
-g = reshape(g, params.nz, params.nx);
-SeisPlotTX(g, pclip=98, wbox=9, hbox=3);
-tmp = -g[:,150]; tmp[1:10] .= 0.0;
-figure(); plot(tmp)
+g_ana[1] = g_ana[1] * rho[iz,ix] * vel1[iz,ix] * 2

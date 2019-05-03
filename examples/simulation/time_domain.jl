@@ -2,14 +2,14 @@ using SeisPlot, SeisAcoustic
 
 # homogeneous velocity and density model
 vel = 3000 * ones(101, 301);  # m/s
-vel[51:end,:] .= 3500;  # m/s
+# vel[51:end,:] .= 3500;  # m/s
 rho = 2000 * ones(101, 301);  # kg/m^3
 
 # number of PML layers
 npml = 20;
 
 # top boundary condition
-free_surface = true;   #(pml or free_surface)
+free_surface = false;   #(pml or free_surface)
 
 # vertical and horizontal grid size
 dz = 10; dx = 10;
@@ -38,7 +38,7 @@ src = Source(2, 150, params; ot=0.0, fdom=20.0,
 # initialize recordings
 irx = collect(1:2:params.nx);
 irz = 2 * ones(length(irx));
-rec_syn = Recordings(irz, irx, params);
+rec = Recordings(irz, irx, params);
 
 # save the boundary value and last wavefield
 path_bnd = joinpath(homedir(), "Desktop/boundary.rsb");

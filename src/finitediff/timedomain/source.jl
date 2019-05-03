@@ -126,8 +126,13 @@ function Source(sz, sx, params::ModelParams; location_flag="index", ot=0.0, amp=
     end
 
     # error checking
-    if isz > params.nz || isx > params.nx
+    if isz > params.nz || isx > params.nx || isz < 1 || isx < 1
        error("source located outside of modeling area")
+    end
+
+    # can't put on the free-surface
+    if params.free_surface && isz == 1
+       error("can't inject source on the surface")
     end
 
     # the auxillary index mapping the location of source to snapshot or wavefield

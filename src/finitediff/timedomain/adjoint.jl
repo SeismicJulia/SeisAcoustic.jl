@@ -128,13 +128,13 @@ function multi_step_adjoint!(path::String, rec::Recordings, params::ModelParams;
     elseif save_flag == "wavefield"
        hdr = wavefield_header(params)
        fid = write_RSheader(path, hdr)
-       append_one_wavefield(fid, spt1, params)
+       append_one_wavefield(fid, spt2, params)
 
     # save pressure
     elseif save_flag == "pressure"
        hdr = pressure_header(params)
        fid = write_RSheader(path, hdr)
-       append_one_pressure(fid, spt1, params)
+       append_one_pressure(fid, spt2, params)
     else
        error("save_type only support snapshot, wavefield or pressure")
     end
