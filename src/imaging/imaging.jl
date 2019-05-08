@@ -1,4 +1,5 @@
-export  
+export source_side_wavefield,
+       get_sourceside_wavefield
 
 include("gradient.jl")
 

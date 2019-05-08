@@ -1,39 +1,34 @@
-using SeisPlot, SeisAcoustic
+using SeisPlot, SeisAcoustic, LinearAlgebra
 
-# homogeneous velocity and density model
+# ========================================================
+#        testing the code to get source-side wave field
+# ========================================================
+# 2-layers velocity model
 vel = 3000 * ones(101, 301);  # m/s
-vel[51:end,:] .= 3500;  # m/s
+vel[51:end,:] .= 3500;
+
+# constant density model
 rho = 2000 * ones(101, 301);  # kg/m^3
 
 # number of PML layers
 npml = 20;
 
 # top boundary condition
-free_surface = true;   #(pml or free_surface)
+free_surface = true;
 
 # vertical and horizontal grid size
 dz = 10; dx = 10;
 
 # time step size and maximum modelling length
-dt = 0.001; tmax = 2.0;  # use second as unit
+dt = 0.001; tmax = 2.0;
 
 # organize these parameters into a structure
 params = ModelParams(rho, vel, free_surface, dz, dx, dt, tmax;
          data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
-# shows the default value for the keyword parameters
-# data_format = (Float32 or Float64)
-# fd_flag     = ("taylor" or "ls")
-# order       = 2 - 10 if we use "ls" to compute the FD coefficients
-#             = 2 - n  if we use "taylor" expansion to compute FD coefficients
 
 # initialize a source
 src = Source(2, 150, params; ot=0.0, fdom=20.0,
       type_flag="ricker", amp=100000, location_flag="index");
-
-# initialize multi-sources
-# isx = collect(5:60:295); ns=length(isx); isz = 2*ones(ns);
-# ot  = 0.5*rand(ns);
-# srcs = get_multi_sources(isz, isx, params; amp=100000, ot=ot, fdom=15);
 
 # initialize recordings
 irx = collect(1:2:params.nx);
@@ -47,121 +42,140 @@ multi_step_forward!(rec, src, params; path_bnd=path_bnd, path_wfd=path_wfd)
 SeisPlotTX(rec.p)
 
 # compute source-side wavefield
-pre = source_side_wavefield(path_bnd, path_wfd, src, params);
-SeisPlotTX(pre[:,:,200], cmap="seismic", wbox=9, hbox=3);
+pre1 = source_side_wavefield(path_bnd, path_wfd, src, params);
+pre2 = get_sourceside_wavefield(src, params; iflag=1);
+pre3 = get_sourceside_wavefield(src, params; iflag=2);
 
-path_sfd = joinpath(homedir(), "Desktop/sfd.rsb");
-hdr = RegularSampleHeader(pre, title="source-side wavefield");
-write_RSdata(path_sfd, hdr, pre);
-
-path_sfd1 = joinpath(homedir(), "Desktop/sfd_forward.rsb");
-get_sourceside_wavefield(path_sfd1, src, params);
-
-path_sfd2 = joinpath(homedir(), "Desktop/sfd_ground.rsb");
-get_wavefield(path_sfd2, src, params);
-
-(hdr, pre0) = read_RSdata(path_sfd);
-(hdr, pre1) = read_RSdata(path_sfd1);
-(hdr, pre2) = read_RSdata(path_sfd2);
-norm(pre0 - pre1) / norm(pre0);
-norm(pre0 - pre2) / norm(pre0);
+# check the consistent of the value
+norm(pre1 - pre2) / norm(pre1);
+norm(pre1 - pre3) / norm(pre1);
 
 it = 399
-SeisPlotTX(pre0[:,:,it], cmap="seismic", wbox=9, hbox=3)
 SeisPlotTX(pre1[:,:,it], cmap="seismic", wbox=9, hbox=3)
 SeisPlotTX(pre2[:,:,it], cmap="seismic", wbox=9, hbox=3)
-
+SeisPlotTX(pre3[:,:,it], cmap="seismic", wbox=9, hbox=3)
 
 # ==============================================================================
-#                       check the correctness of gradient
+#            check the analytical gradient against numerical gradient
 # ==============================================================================
+# 2-layers velocity model
+vel = 3000 * ones(101, 301);  # m/s
+vel[51:end,:] .= 3500;
+
+# constant density model
+rho = 2000 * ones(101, 301);  # kg/m^3
+
+# top boundary condition
+free_surface = false;
+
+# vertical and horizontal grid size
+dz = 10; dx = 10;
+
+# time step size and maximum modelling length
+dt = 0.001; tmax = 2.0;
+
+# organize these parameters into a structure
+params = ModelParams(rho, vel, free_surface, dz, dx, dt, tmax; data_format=Float64);
+
+# initialize a source
+src = Source(2, 150, params; ot=0.0, fdom=20.0,
+      type_flag="ricker", amp=100000, location_flag="index");
+
+# generate observed data
 irx = collect(1:2:params.nx);
 irz = 2 * ones(length(irx));
-rec_obs = Recordings(irz, irx, params);
+dobs= Recordings(irz, irx, params);
 
-# generate observations
-multi_step_forward!(rec_obs, src, params);
-SeisPlotTX(rec_obs.p, pclip=98, cmap="seismic");
-
-# initial velocity model as a homogeneous one
-vel1    = 3000 * ones(101, 301);  # m/s
-delta_m = 1e-7;            # velocity pertubation
-iz = 51; ix = 151;
-vel1[iz, ix] = vel1[iz,ix] + delta_m
-
-params1 = ModelParams(rho, vel1, free_surface, dz, dx, dt, tmax;
-         data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
-
-rec_syn = Recordings(irz, irx, params1);
-multi_step_forward!(rec_syn, src, params1);
-
-# compute the residue
-residue = Recordings(irz, irx, params1);
-for ir = 1 : rec_syn.nr
-    for it = 1 : rec_syn.nt
-        residue.p[it,ir] = rec_syn.p[it,ir] - rec_obs.p[it,ir]
-    end
-end
-J_plus = norm(residue.p) / 2
+# generate recordings and boundary value
+multi_step_forward!(dobs, src, params)
+SeisPlotTX(dobs.p, cmap="seismic", pclip=98)
 
 
-# pertubate velocity
-vel1[iz, ix] = vel1[iz,ix] - 2*delta_m
+# ==============================================================================
+#                      numerical gradient
+# initial velocity model as homogenous one
+vel0    = 3000 * ones(101, 301);
+delta_m = 1e-7;
 
-params1 = ModelParams(rho, vel1, free_surface, dz, dx, dt, tmax;
-         data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
+# one model parameter's gradient
+iz = 51; ix = 150;
 
-rec_syn = Recordings(irz, irx, params1);
-multi_step_forward!(rec_syn, src, params1);
+# positive velocity model partubation
+vel0[iz, ix] = vel0[iz,ix] + delta_m
+
+# model parameter
+params0 = ModelParams(rho, vel0, free_surface, dz, dx, dt, tmax; data_format=Float64);
+
+# get synthetic data
+dsyn = Recordings(irz, irx, params0);
+multi_step_forward!(dsyn, src, params0);
 
 # compute the residue
-residue = Recordings(irz, irx, params1);
-for ir = 1 : rec_syn.nr
-    for it = 1 : rec_syn.nt
-        residue.p[it,ir] = rec_syn.p[it,ir] - rec_obs.p[it,ir]
+dres = Recordings(irz, irx, params0);
+for ir = 1 : dsyn.nr
+    for it = 1 : dsyn.nt
+        dres.p[it,ir] = dsyn.p[it,ir] - dobs.p[it,ir]
     end
 end
-J_minus = norm(residue.p) / 2
+J_plus = (norm(dres.p))^2 / 2.0
+
+# negative velocity model partubation
+vel0[iz, ix] = vel0[iz,ix] - 2*delta_m
+
+# model parameter
+params0 = ModelParams(rho, vel0, free_surface, dz, dx, dt, tmax; data_format=Float64);
+
+# synthetic data
+dsyn = Recordings(irz, irx, params0);
+multi_step_forward!(dsyn, src, params0);
+
+# compute the residue
+dres = Recordings(irz, irx, params0);
+for ir = 1 : dsyn.nr
+    for it = 1 : dsyn.nt
+        dres.p[it,ir] = dsyn.p[it,ir] - dobs.p[it,ir]
+    end
+end
+J_minus = norm(dres.p)^2 / 2.0
 
 # compute gradient numerically
 g_num = (J_plus - J_minus) / (2 * delta_m)
 
-# compute the gradient analytically
-vel1    = 3000 * ones(101, 301);  # m/s
+# ==============================================================================
+#                      analytical graident
+vel0 = 3000 * ones(101, 301);  # m/s
+params0 = ModelParams(rho, vel0, free_surface, dz, dx, dt, tmax; data_format=Float64);
 
-params1 = ModelParams(rho, vel1, free_surface, dz, dx, dt, tmax;
-         data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
-
-rec_syn = Recordings(irz, irx, params1);
-multi_step_forward!(rec_syn, src, params1);
+#       generate synthetic data
+dsyn = Recordings(irz, irx, params0);
+multi_step_forward!(dsyn, src, params0);
 
 # compute the residue
-residue = Recordings(irz, irx, params1);
-for ir = 1 : rec_syn.nr
-    for it = 1 : rec_syn.nt
-        residue.p[it,ir] = rec_syn.p[it,ir] - rec_obs.p[it,ir]
+dres = Recordings(irz, irx, params0);
+for ir = 1 : dsyn.nr
+    for it = 1 : dsyn.nt
+        dres.p[it,ir] = dsyn.p[it,ir] - dobs.p[it,ir]
     end
 end
 
-# save the adjoint wavefield
-path_adj = joinpath(homedir(), "Desktop/adj.rsb");
-multi_step_adjoint!(path_adj, residue, params1, save_flag="snapshot")
-(hdr, adj) = read_RSdata(path_adj)
+# get the adjoint wavefield
+path_adj = joinpath(homedir(), "Desktop/adj_pressure.rsb");
+multi_step_adjoint!(path_adj, dres, params0, save_flag="pressure")
+(hdr, adj) = read_RSdata(path_adj);
 
-path_sfd = joinpath(homedir(), "Desktop/sfd_ground.rsb");
-get_wavefield(path_sfd, src, params1)
-(hdr, sfd) = read_RSdata(path_sfd)
+# get the source side wave field
+pre = get_sourceside_wavefield(src, params0);
 
-path_vz = joinpath(homedir(), "Desktop/dvdz.rsb");
-path_vx = joinpath(homedir(), "Desktop/dvdx.rsb");
-get_dvdzx(path_vz, path_vx, src, params1)
-(hdr, svz) = read_RSdata(path_vz)
-(hdr, svx) = read_RSdata(path_vx)
-
-g_ana = zeros(1)
-i1 = iz + params1.ntop
-i2 = ix + params1.npml
-for it = 1 : params.nt-1
-    g_ana[1] = g_ana[1] + svz[i1, i2, it] * adj[i1, i2, 3, it+1] + svx[i1, i2, it] * adj[i1, i2, 4, it+1]
+# compute the gradient analytically
+g_ana = zeros(params.data_format, params.nz, params.nx);
+for it = 1 : params0.nt-1
+    for i2 = 1 : params.nx
+        for i1 = 1 : params.nz
+            g_ana[i1,i2] = g_ana[i1,i2] + pre[i1,i2,it] * adj[i1,i2,it+1] / 2.0
+        end
+    end
 end
-g_ana[1] = g_ana[1] * rho[iz,ix] * vel1[iz,ix] * 2
+
+g_ana[iz,ix]
+g_num
+SeisPlotTX(g_ana, cmap="seismic", hbox=4, wbox=9)
