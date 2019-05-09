@@ -1,11 +1,63 @@
 """
-   damping profile for 2D frequency domain finite difference
+   immutable struct contain the model parameters for FDFD
+*  data_format : Float32 or Float64
+*  nz          : depth of model
+*  nx          : length of model
+*  npml        : number of PML layers
+*  free_surface: true -> no obsorbtion on the surface
+                 false-> PML on the surface
+*  Nz          : depth of model (include PML padding)
+*  Nx          : length of model (include PML padding)
+*  ntop        : number of padded PML layers on the top
+*  spt2wfd     : auxillary index vector for computing wavefield from snapshot
+*  h           : grid spatial size
+*  dt          : time step size
+*  tmax        : maximum modelling length
+*  nt          : number of time steps
+*  rho         : 2D density model
+*  vel         : 2D P-wave velocity model
+*  omega       : vector of radian frequency
 """
-struct DampingProfile{Tv<:AbstractFloat}
-    zdamp_integer :: Vector{Complex{Tv}}
-    zdamp_stagger :: Vector{Complex{Tv}}
-    xdamp_integer :: Vector{Complex{Tv}}
-    xdamp_stagger :: Vector{Complex{Tv}}
+struct FDParams{Ti<:Int64, Tv<:AbstractFloat}
+
+    data_format  :: DataType
+    nz           :: Ti
+    nx           :: Ti
+    npml         :: Ti
+    free_surface :: Bool
+    Nz           :: Ti
+    Nx           :: Ti
+    ntop         :: Ti
+    spt2wfd      :: Vector{Ti}
+    h            :: Vector{Tv}
+    dt           :: Tv
+    tmax         :: Tv
+    nt           :: Ti
+    rho          :: Matrix{Tv}
+    vel          :: Matrix{Tv}
+    omega        :: Vector{Tv}
+end
+
+"""
+   Overloading the show function for FDParams
+"""
+function show(io::IO, params::FDParams)
+
+    # size of model
+    @printf("nz = %4d, nx = %4d, npml = %4d\n", params.nz, params.nx, params.npml)
+    @printf("h  = %4.1f\n", params.h)
+
+    # top boundary condition
+    if params.free_surface
+       @printf("top boundary conditon = %20s\n", "free surface")
+    else
+       @printf("top boundary conditon = %20s\n", "PML obsorbing")
+    end
+
+    # data presicion (Float32, Float64)
+    @printf("data_format=%16s\n", params.data_format)
+
+    return nothing
 end
 
 """
@@ -32,7 +84,7 @@ function DampingProfile(params::ModelParams, omega::Tv;
     xdamp_stagger = convert(Vector{Complex{params.data_format}}, xdamp_stagger)
 
     # group into a struct
-    return DampingProfile(zdamp_integer, zdamp_stagger, xdamp_integer, xdamp_stagger)
+    return zdamp_integer, zdamp_stagger, xdamp_integer, xdamp_stagger
 end
 
 """
