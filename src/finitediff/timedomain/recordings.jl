@@ -4,6 +4,7 @@
 struct Recordings{Ti<:Int64, Tv<:AbstractFloat}
      nt      :: Ti          # number of samples per trace
      nr      :: Ti          # number of receiver
+     dt      :: Tv
      irz     :: Vector{Ti}  # vertical grid index of receivers
      irx     :: Vector{Ti}  # horizontal grid index of receivers
      spt2rec :: Vector{Ti}  # index mapping of receiver to snapshot
@@ -65,7 +66,7 @@ function Recordings(rz::Vector, rx::Vector,
     end
 
     # initalize empty recordings
-    rec= Recordings(params.nt, nr, irz, irx, spt2rec,
+    rec= Recordings(params.nt, nr, params.dt, irz, irx, spt2rec,
          zeros(params.data_format, params.nt, nr))
 
     return rec
@@ -99,6 +100,9 @@ function write_recordings(path::String, rec::Recordings)
     else
        error("non-support data format")
     end
+
+    # write time sampling interval
+    write(fid, rec.dt)
 
     # write the recordings
     write(fid, vec(rec.p))
@@ -140,7 +144,10 @@ function read_recordings(path::String)
        error("non-support data format")
     end
 
-    # write the recordings
+    # read the time sampling interval
+    dt = read(fid, data_format)
+
+    # read the recordings
     p = zeros(data_format, nt * nr)
     read!(fid, p); p = reshape(p, nt, nr);
 
@@ -148,7 +155,7 @@ function read_recordings(path::String)
     close(fid)
 
     # organize them into a structure
-    rec = Recordings(nt, nr, irz, irx, spt2rec, p)
+    rec = Recordings(nt, nr, dt, irz, irx, spt2rec, p)
 
     return rec
 end
