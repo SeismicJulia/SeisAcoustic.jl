@@ -1,0 +1,40 @@
+\begin{table}
+\centering
+\footnotesize
+\begin{tabular}{lcccc}
+\toprule
+ & Example 1               & Example 2        & Example 3  & Example 4 \\
+ & Cropped Marmousi & Point scatterers & ANON          & Marmousi \\
+\midrule
+
+\textbf{Category} & & & &\\
+ \hspace{3mm} Full Hessian computed ? & Yes & Yes & No & No \\
+ \hspace{3mm} No. elements in Hessian & $4.0\times10^{8}$ & $4.0\times10^{8}$ & $4.41\times10^{10}$ & $2.04\times10^{11}$ \\
+ \hspace{3mm} Method to compute Kronecker factors  & SVD & SVD & MC & MC\\
+ \hspace{3mm} No. factors & 64 & 64 & 100 & 100\\
+ \hspace{3mm} Hessian samples (\%)  & 100 & 100 & 0.31 & 0.07\\
+ \hspace{3mm} Bandwidth  & - & - & 61 $\times$ 61 & 41 $\times$ 41\\
+
+
+\textbf{Numerical grid} & & & &\\
+ \hspace{3mm} Dimensions (km) & 1.0 x 2.0 & 1.0 x 2.0 & 2.4 x 7.0 &  3.6 x 8.0 \\
+ \hspace{3mm} Grid & 100 x 200 & 100 x 200 & 300 x 700 & 451 x 1001\\
+ \hspace{3mm} Spacing ($\Delta x = \Delta z$) (m) & 10 & 10 & 8 & 8 \\
+
+ \textbf{Acquisition} & & & &\\
+ \hspace{3mm} No. Src/Rec & 29/100 & 29/100 & 99/300 & 100/500\\
+ \hspace{3mm} Src/Rec int. ($\Delta x_{s}/\Delta x_{r}$) (m) & 20/60 & 20/60 & 16/60 & 20/100\\
+ \textbf{Simulation} & & & &\\
+ \hspace{3mm} Recording time (s) & 2.5 & 2.5 & 3.6 & 5.0\\
+ \hspace{3mm} Time interval ($\Delta{t}$) (ms) & 1.0 & 1.0 & 1.0 & 0.5\\
+ \hspace{3mm} Source wavelet & 15~Hz Ricker & 8~Hz Ricker & 5~Hz Ricker & 15~Hz Ricker\\
+  \textbf{LSRTM} & & & &\\
+
+ \hspace{3mm} No. CGLS iterations (s) & - & 50 & 50 & 50\\
+\bottomrule
+\end{tabular}
+\caption{Parameters for numerical tests.}
+\label{tab1}
+\end{table}
+\efloatseparator
+ 
