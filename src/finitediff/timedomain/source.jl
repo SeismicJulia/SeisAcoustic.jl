@@ -109,7 +109,7 @@ end
    initialize source structure, we provide four options to specify the source wavelet
 ricker (default option), sinc, miniphase, user provided.
 """
-function Source(sz, sx, params::ModelParams; location_flag="index", ot=0.0, amp=1.0, fdom=20.0, hl=128,
+function Source(sz, sx, params::TdParams; location_flag="index", ot=0.0, amp=1.0, fdom=20.0, hl=128,
                 type_flag="ricker", p=Vector{Float32}(undef,0)) where {Tv <: Real}
 
     # source location given index
@@ -171,7 +171,7 @@ end
 """
    get a vector of Source
 """
-function get_multi_sources(sz::Vector, sx::Vector, params::ModelParams; location_flag="index", ot=0.0, amp=1.0,
+function get_multi_sources(sz::Vector, sx::Vector, params::TdParams; location_flag="index", ot=0.0, amp=1.0,
                           fdom=20.0, hl=128, type_flag="ricker", p=Vector{Float32}(undef,0))
 
     # number of source

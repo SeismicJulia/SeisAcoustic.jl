@@ -12,7 +12,7 @@ end
 """
    Initialize a empty snapshot, all the fields are zero vectors
 """
-function Snapshot(params::ModelParams)
+function Snapshot(params::TdParams)
 
     data_format = params.data_format
     N           = params.Nz * params.Nx
@@ -33,7 +33,7 @@ end
 """
    Initialize zero wavefield
 """
-function Wavefield(params::ModelParams)
+function Wavefield(params::TdParams)
 
     data_format = params.data_format
     N           = params.nz * params.nx
@@ -44,7 +44,7 @@ end
 """
    Crop the PML layers of snapshot and sum pz, px to obtain wavefield at one time step
 """
-function sample_spt2wfd(spt::Snapshot, params::ModelParams)
+function sample_spt2wfd(spt::Snapshot, params::TdParams)
 
     # initial a empty wavefield
     wfd = Wavefield(params)
@@ -63,7 +63,7 @@ end
    sample the adjoint snapshot to get the pressure field and field at boundary part are cropped
 """
 function sample_adjoint2pre!(p::Vector{Tv}, spt::Snapshot,
-         params::ModelParams) where {Tv <: AbstractFloat}
+         params::TdParams) where {Tv <: AbstractFloat}
 
     i = 0
     for j in params.spt2wfd
@@ -76,7 +76,7 @@ end
 """
    Create header of regularly sampled data for snapshot
 """
-function snapshot_header(params::ModelParams)
+function snapshot_header(params::TdParams)
 
     # the size of data
     n1 = params.Nz
@@ -135,7 +135,7 @@ end
 """
    create a header for wavefield in regularly sampled data format
 """
-function wavefield_header(params::ModelParams)
+function wavefield_header(params::TdParams)
 
     # the size of data
     n1 = params.nz
@@ -159,7 +159,7 @@ end
 """
    append one wavefield to the end of provided stream
 """
-function append_one_wavefield(fid::IOStream, spt::Snapshot, params::ModelParams)
+function append_one_wavefield(fid::IOStream, spt::Snapshot, params::TdParams)
 
     # length of one wavefield
     N = params.nz * params.nx
@@ -189,7 +189,7 @@ end
 """
    save the wavefield at the last time step in a independent file
 """
-function write_wavefield(path::String, wfd::Wavefield, params::ModelParams)
+function write_wavefield(path::String, wfd::Wavefield, params::TdParams)
 
     # length of wavefield
     n1 = params.nz
@@ -235,7 +235,7 @@ end
 """
    create a header of regularly sampled data for pressure
 """
-function pressure_header(params::ModelParams)
+function pressure_header(params::TdParams)
 
     # the size of data
     n1 = params.nz
@@ -257,7 +257,7 @@ end
 """
    append one pressure to the end of provided stream
 """
-function append_one_pressure(fid::IOStream, spt::Snapshot, params::ModelParams)
+function append_one_pressure(fid::IOStream, spt::Snapshot, params::TdParams)
 
     # length of pressure vector
     N = params.nz * params.nx
@@ -330,7 +330,7 @@ end
    Constructor of WavefieldBound, it provide two options, 1: include all time steps, 2: just one time step.
 by setting the keyword argument flag=1 or flag=2.
 """
-function WavefieldBound(params::ModelParams; step_flag=1)
+function WavefieldBound(params::TdParams; step_flag=1)
 
     # length of boundary elements for one time step
     N = length(params.spt2bnd)
@@ -353,7 +353,7 @@ end
 """
    Create the  RS header for wavefield boundary
 """
-function boundary_header(params::ModelParams)
+function boundary_header(params::TdParams)
 
     # the size of data
     n1 = length(params.spt2bnd)
@@ -405,7 +405,7 @@ end
 """
    append the wavefield boundary at one time step to the end of fid
 """
-function append_one_boundary(fid::IOStream, spt::Snapshot, params::ModelParams)
+function append_one_boundary(fid::IOStream, spt::Snapshot, params::TdParams)
 
     # length of one wavefield
     N = length(params.spt2bnd)
@@ -445,7 +445,7 @@ end
   update the content in WavefieldBound, specifically
 """
 function read_one_boundary!(bnd::WavefieldBound, fid::IOStream,
-         it::Int64, params::ModelParams)
+         it::Int64, params::TdParams)
 
     # byte length of one boundary
     byte_length = length(params.spt2bnd) * sizeof(params.data_format) * 3

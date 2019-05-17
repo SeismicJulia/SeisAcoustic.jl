@@ -1,7 +1,7 @@
 """
    The adjoint operator of one_step_forward (in-place).
 """
-function one_step_adjoint!(spt2::Snapshot, spt1::Snapshot, params::ModelParams,
+function one_step_adjoint!(spt2::Snapshot, spt1::Snapshot, params::TdParams,
          tmp::Vector{Tv}, tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
          tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Tv<:AbstractFloat}
 
@@ -103,7 +103,7 @@ end
 """
    save the adjoint snapshot, wavefield or pressure field
 """
-function multi_step_adjoint!(path::String, rec::Recordings, params::ModelParams;
+function multi_step_adjoint!(path::String, rec::Recordings, params::TdParams;
                              save_flag="pressure")
 
     # initialize intermediate variables
@@ -170,7 +170,7 @@ end
    the adjoint operator of one point source simulation, only used for testing the
 dot product test
 """
-function multi_step_adjoint!(rec::Recordings, src::Source, params::ModelParams)
+function multi_step_adjoint!(rec::Recordings, src::Source, params::TdParams)
 
     # initialize intermediate variables
     spt1 = Snapshot(params)
@@ -215,7 +215,7 @@ end
 wavefield at only one time step is provided
 """
 function one_step_backward!(wfd2::Wavefield, wfd1::Wavefield,
-         bnd::WavefieldBound, params::ModelParams,
+         bnd::WavefieldBound, params::TdParams,
          tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
          tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
 
@@ -316,7 +316,7 @@ end
 the last wavefield
 """
 function pressure_reconstruct_backward(path_bnd::Ts, path_wfd::Ts,
-         src::Source, params::ModelParams) where {Ts <: String}
+         src::Source, params::TdParams) where {Ts <: String}
 
     # length of one-step pressure field
     N = params.nz * params.nx
@@ -369,7 +369,7 @@ end
 the last wavefield when the wavefield is generated with multiple sources
 """
 function pressure_reconstruct_backward(path_bnd::Ts, path_wfd::Ts,
-         srcs::Vector{Source}, params::ModelParams) where {Ts <: String}
+         srcs::Vector{Source}, params::TdParams) where {Ts <: String}
 
     # length of one-step pressure field
     N = params.nz * params.nx
@@ -421,7 +421,7 @@ end
 #    one step backward reconstruction of wave field from the boundary values
 # """
 # function one_step_backward!(wfd2::Wavefield, wfd1::Wavefield, it::Ti,
-#          bnd::WavefieldBound, params::ModelParams,
+#          bnd::WavefieldBound, params::TdParams,
 #          tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
 #          tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
 #
@@ -522,7 +522,7 @@ end
 # the last wavefield
 # """
 # function pressure_reconstruct_backward(bnd::WavefieldBound, wfd::Wavefield,
-#          src::Source, params::ModelParams)
+#          src::Source, params::TdParams)
 #
 #     # length of one-step pressure field
 #     N = params.nz * params.nx
@@ -615,7 +615,7 @@ end
 #    one step backward reconstruction of wave field from the boundary values
 # """
 # function one_step_backward!(wfd1::Wavefield, wfd2::Wavefield, rfds::RigidFDStencil, it::Ti,
-#          bnd::WavefieldBound, tmp1::Vector{Tv}, tmp2::Vector{Tv}, params::ModelParams) where {Ti<:Int64, Tv<:AbstractFloat}
+#          bnd::WavefieldBound, tmp1::Vector{Tv}, tmp2::Vector{Tv}, params::TdParams) where {Ti<:Int64, Tv<:AbstractFloat}
 #
 #     # wfd1.p  = wfd2.p  - rfds.MpxBvx * wfd2.vx - rfds.MpzBvz * wfd2.vz
 #     # wfd1.p[bound.index]  = bound.p[:, it]
@@ -653,7 +653,7 @@ end
 #    the adjoint operator of one point source simulation.
 # """
 # function multi_step_adjoint(rec::Recordings, ofds::ObsorbFDStencil,
-#          src::Source, params::ModelParams)
+#          src::Source, params::TdParams)
 #
 #     # initialize intermediate variables
 #     spt1 = Snapshot(params)
@@ -695,7 +695,7 @@ end
 # the last wavefield
 # """
 # function pressure_reconstruct_backward(bnd::WavefieldBound, wfd::Wavefield,
-#          rfds::RigidFDStencil, src::Source, params::ModelParams)
+#          rfds::RigidFDStencil, src::Source, params::TdParams)
 #
 #     # length of one-step pressure field
 #     N = params.nz * params.nx

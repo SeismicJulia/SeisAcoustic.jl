@@ -2,7 +2,7 @@ using SeisPlot, SeisAcoustic
 
 # homogeneous velocity and density model
 vel = 3000 * ones(101, 301);  # m/s
-# vel[51:end,:] .= 3500;  # m/s
+vel[51:end,:] .= 3500;  # m/s
 rho = 2000 * ones(101, 301);  # kg/m^3
 
 # number of PML layers
@@ -18,7 +18,7 @@ dz = 10; dx = 10;
 dt = 0.001; tmax = 2.0;  # use second as unit
 
 # organize these parameters into a structure
-params = ModelParams(rho, vel, free_surface, dz, dx, dt, tmax;
+params = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
          data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
 # shows the default value for the keyword parameters
 # data_format = (Float32 or Float64)
@@ -45,12 +45,13 @@ path_bnd = joinpath(homedir(), "Desktop/boundary.rsb");
 path_wfd = joinpath(homedir(), "Desktop/wavefield.rsb");
 
 # forward modeling of simultaneous sources
-# multi_step_forward!(rec_syn, src , params; path_bnd=path_bnd, path_wfd=path_wfd);
-multi_step_forward!(rec_syn, srcs, params; path_bnd=path_bnd, path_wfd=path_wfd);
+multi_step_forward!(rec_syn, src , params; path_bnd=path_bnd, path_wfd=path_wfd);
+# multi_step_forward!(rec_syn, srcs, params; path_bnd=path_bnd, path_wfd=path_wfd);
 SeisPlotTX(rec_syn.p, pclip=98);
 
 # save the pressure field
 path_pre = joinpath(homedir(), "Desktop/pressure.rsb");
+
 # multi_step_forward!(path_pre, src, params; save_flag="pressure");
 multi_step_forward!(path_pre, src, params; save_flag="pressure");
 (hdr, p0) = read_RSdata(path_pre);

@@ -415,7 +415,7 @@ end
 # """
 #    constructor for finite difference stencil with rigid boundary condition
 # """
-# function RigidFDStencil(params::ModelParams)
+# function RigidFDStencil(params::TdParams)
 #
 #     # expand physical model parameters
 #     lambda = vp2lambda(params.vel, params.rho)
@@ -866,7 +866,7 @@ end
 # """
 #    constructor for obsorbing finite difference stencil
 # """
-# function ObsorbFDStencil(params::ModelParams)
+# function ObsorbFDStencil(params::TdParams)
 #
 #     # pml coefficient
 #     pml = PMLCoefficients(params)
@@ -888,7 +888,7 @@ end
 # """
 #    constructor for finite difference stencil with rigid boundary condition
 # """
-# function RigidFDStencil(params::ModelParams)
+# function RigidFDStencil(params::TdParams)
 #
 #     # expand physical model parameters
 #     lambda = vp2lambda(params.vel, params.rho)

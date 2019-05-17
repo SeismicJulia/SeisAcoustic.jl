@@ -73,7 +73,7 @@ end
 # """
 #    constructor for PML obsorbing boundary coefficients
 # """
-# function PMLCoefficients(params::ModelParams)
+# function PMLCoefficients(params::TdParams)
 #
 #     data_format = params.data_format
 #

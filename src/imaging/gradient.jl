@@ -1,131 +1,61 @@
-# """
-#    compute the source-side wave field as (p[it+1/2]-p[it-1/2]-f[it]) / k
-# """
-# function apply_image_condition!(g::Vector{Tv}, p_adj::Vector{Tv}, wfd1::Wavefield,
-#          wfd2::Wavefield, params::ModelParams) where {Tv <: AbstractFloat}
-#
-#     # number of elements
-#     N = params.nz * params.nx
-#
-#     # constant
-#     # double = params.data_format(2.0)
-#
-#     # compute gradient
-#     for i = 1 : N
-#         # dpdt = (wfd2.p[i] - wfd1.p[i]) / (params.rho[i] * params.vel[i] * params.vel[i])
-#         dpdt = (wfd2.p[i] - wfd1.p[i]) / params.vel[i]
-#         g[i] = g[i] + dpdt * p_adj[i]
-#     end
-#     return nothing
-# end
-#
-# """
-#    compute the gradient of bulk modulus
-# """
-# function bulk_gradient(rec::Recordings, path_bnd::Ts, path_wfd::Ts,
-#          src::Source, params::ModelParams) where {Ts <: String}
-#
-#     # model length
-#     N = params.nz * params.nx
-#
-#     # allocate memory for computing adjoint wavefield
-#     spt1 = Snapshot(params)
-#     spt2 = Snapshot(params)
-#     tmp  = zeros(params.data_format, params.Nz * params.Nx)
-#     tmp_z1 = zeros(params.data_format, params.Nz)
-#     tmp_z2 = zeros(params.data_format, params.Nz)
-#     tmp_x1 = zeros(params.data_format, params.Nx)
-#     tmp_x2 = zeros(params.data_format, params.Nx)
-#
-#     # allocate memory for reconstructing source-side wavefield backward
-#     wfd1 = Wavefield(params)
-#     wfd2 = read_one_wavefield(path_wfd, 1)
-#     wfd_z1 = zeros(params.data_format, params.nz)
-#     wfd_z2 = zeros(params.data_format, params.nz)
-#     wfd_x1 = zeros(params.data_format, params.nx)
-#     wfd_x2 = zeros(params.data_format, params.nx)
-#
-#     # ============================================
-#     # pre = zeros(params.data_format, N * params.nt)
-#     # idx_o = N*params.nt - N + 1
-#     # copyto!(pre, idx_o, wfd2.p, 1, N)
-#     # ============================================
-#
-#     # allocate memory to save the adjoint pressure field
-#     p_adj = zeros(params.data_format, N)
-#
-#     # allocate memory to save the gradient
-#     g     = zeros(params.data_format, N)
-#
-#     # inject the recordings to the last snapshot
-#     inject_rec2spt!(spt2, rec, params.nt)
-#
-#     # get the adjoint wavefield at the last time step
-#     sample_adjoint2pre!(p_adj, spt2, params)
-#
-#     # open the file of boundary wavefield
-#     fid_bnd = open(path_bnd, "r")
-#     bnd     = WavefieldBound(params)
-#
-#     # prepare for backward reconstruction
-#     subtract_source!(wfd2, src, params.nt)
-#     read_one_boundary!(bnd, fid_bnd, params.nt-1, params)
-#     one_step_backward!(wfd1, wfd2, bnd, params,
-#                        wfd_z1, wfd_z2, wfd_x1, wfd_x2)
-#
-#     # =================================
-#     # idx_o = idx_o - N
-#     # copyto!(pre, idx_o, wfd1.p, 1, N)
-#     # =================================
-#
-#     # compute the gradient
-#     apply_image_condition!(g, p_adj, wfd1, wfd2, params)
-#
-#     # prepare for the next step backward reconstruction
-#     copy_wavefield!(wfd2, wfd1)
-#
-#     # backward propagation
-#     for it = params.nt-1 : -1 : 2
-#
-#         # compute adjoint wavefield
-#         one_step_adjoint!(spt1, spt2, params,
-#                           tmp, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
-#         inject_rec2spt!(spt1, rec, it)
-#         copy_snapshot!(spt2, spt1)
-#
-#         # get the adjoint pressure at the current time step
-#         sample_adjoint2pre!(p_adj, spt2, params)
-#
-#         # read the source-side wavefield at the last time step
-#         subtract_source!(wfd2, src, it)
-#         read_one_boundary!(bnd, fid_bnd, it-1, params)
-#         one_step_backward!(wfd1, wfd2, bnd, params,
-#                            wfd_z1, wfd_z2, wfd_x1, wfd_x2)
-#
-#         # =================================
-#         # idx_o = idx_o - N
-#         # copyto!(pre, idx_o, wfd1.p, 1, N)
-#         # =================================
-#
-#         # compute the gradient
-#         apply_image_condition!(g, p_adj, wfd1, wfd2, params)
-#
-#         # prepare for the next step backward reconstruction
-#         copy_wavefield!(wfd2, wfd1)
-#     end
-#
-#     close(fid_bnd)
-#     return g
-# end
+"""
+   compute the residues between two recordings (synthetic and observed data)
+"""
+function get_residue(dsyn::Recordings, dobs::Recordings)
+
+    # data format of recordings
+    data_format = eltype(dsyn.p)
+
+    # generate matrix to save the difference between dsyn and dobs
+    p = zeros(data_format, dsyn.nt, dsyn.nr)
+
+    # compute the difference
+    for ir = 1 : dsyn.nr
+        for it = 1 : dsyn.nt
+            p[it,ir] = dsyn.p[it,ir] - dobs.p[it,ir]
+        end
+    end
+
+    # return the residue in a format of recordings
+    return Recordings(dsyn.nt, dsyn.nr, dsyn.dt, copy(dsyn.irz), copy(dsyn.irx), copy(dsyn.spt2rec), p)
+end
 
 """
-   compute the source-side wave field by backward reconstruction with saved boundary values
+   compute the source-side wave field as (p[it+1/2]-p[it-1/2]-f[it]) / k
 """
-function source_side_wavefield(path_bnd::Ts, path_wfd::Ts,
-         src::Source, params::ModelParams) where {Ts <: String}
+function apply_image_condition!(g::Vector{Tv}, p_adj::Vector{Tv}, wfd1::Wavefield,
+         wfd2::Wavefield, params::TdParams) where {Tv <: AbstractFloat}
+
+    # number of elements
+    N = params.nz * params.nx
+
+    # compute gradient
+    for i = 1 : N
+        dpdt = 2.0 * (wfd2.p[i] - wfd1.p[i]) / params.vel[i]
+        g[i] = g[i] + dpdt * p_adj[i]
+    end
+    return nothing
+end
+
+"""
+   compute the gradient of velocity model, the source-side wavefield is reconstructed from
+last wavefield and boundary value, the adjoint wavefield is obtained by backward propagating
+the residues.
+"""
+function velocity_gradient(res::Recordings, path_bnd::Ts, path_wfd::Ts,
+         src::Source, params::TdParams) where {Ts <: String}
 
     # model length
     N = params.nz * params.nx
+
+    # allocate memory for computing adjoint wavefield
+    spt1 = Snapshot(params)
+    spt2 = Snapshot(params)
+    tmp    = zeros(params.data_format, params.Nz * params.Nx)
+    tmp_z1 = zeros(params.data_format, params.Nz)
+    tmp_z2 = zeros(params.data_format, params.Nz)
+    tmp_x1 = zeros(params.data_format, params.Nx)
+    tmp_x2 = zeros(params.data_format, params.Nx)
 
     # allocate memory for reconstructing source-side wavefield backward
     wfd1 = Wavefield(params)
@@ -135,25 +65,30 @@ function source_side_wavefield(path_bnd::Ts, path_wfd::Ts,
     wfd_x1 = zeros(params.data_format, params.nx)
     wfd_x2 = zeros(params.data_format, params.nx)
 
+    # allocate memory to save the adjoint pressure field
+    p_adj = zeros(params.data_format, N)
+
+    # allocate memory to save the gradient
+    g     = zeros(params.data_format, N)
+
+    # inject the recordings to the last snapshot
+    inject_rec2spt!(spt2, res, params.nt)
+
+    # get the adjoint pressue wavefield at the last time step
+    sample_adjoint2pre!(p_adj, spt2, params)
+
     # open the file of boundary wavefield
     fid_bnd = open(path_bnd, "r")
     bnd     = WavefieldBound(params)
 
-    # prepare for backward reconstruction
+    # backward reconstruct wavefield
     subtract_source!(wfd2, src, params.nt)
     read_one_boundary!(bnd, fid_bnd, params.nt-1, params)
     one_step_backward!(wfd1, wfd2, bnd, params,
                        wfd_z1, wfd_z2, wfd_x1, wfd_x2)
 
-    # save nt-1 source side wavefield
-    pre = zeros(params.data_format, N * (params.nt-1))
-    tmp = zeros(params.data_format, N)
-    idx_o = N * (params.nt-2) + 1
-
-    for i = 1 : N
-        tmp[i] = 2.0 * (wfd2.p[i] - wfd1.p[i]) / params.vel[i]
-    end
-    copyto!(pre, idx_o, tmp, 1, N)
+    # compute the gradient
+    apply_image_condition!(g, p_adj, wfd1, wfd2, params)
 
     # prepare for the next step backward reconstruction
     copy_wavefield!(wfd2, wfd1)
@@ -161,23 +96,33 @@ function source_side_wavefield(path_bnd::Ts, path_wfd::Ts,
     # backward propagation
     for it = params.nt-1 : -1 : 2
 
+        # compute adjoint wavefield
+        one_step_adjoint!(spt1, spt2, params,
+                          tmp, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+        inject_rec2spt!(spt1, res, it)
+        copy_snapshot!(spt2, spt1)
+
+        # get the adjoint pressure at the current time step
+        sample_adjoint2pre!(p_adj, spt2, params)
+
         # read the source-side wavefield at the last time step
         subtract_source!(wfd2, src, it)
         read_one_boundary!(bnd, fid_bnd, it-1, params)
         one_step_backward!(wfd1, wfd2, bnd, params,
                            wfd_z1, wfd_z2, wfd_x1, wfd_x2)
 
-        for i = 1 : N
-            tmp[i] = 2.0 * (wfd2.p[i] - wfd1.p[i]) / params.vel[i]
-        end
-        idx_o = idx_o - N
-        copyto!(pre, idx_o, tmp, 1, N)
+        # compute the gradient
+        apply_image_condition!(g, p_adj, wfd1, wfd2, params)
 
         # prepare for the next step backward reconstruction
         copy_wavefield!(wfd2, wfd1)
     end
 
-    return reshape(pre, params.nz, params.nx, params.nt-1)
+    # close the boundary value file
+    close(fid_bnd)
+
+    # return the gradient of velocity model
+    return g
 end
 
 """
@@ -185,7 +130,7 @@ end
 the source-side wavefield. iflag=1: source side wavefield is computed from pressure
                            iflag=2: source side wavefield is computed from particle velocity
 """
-function get_sourceside_wavefield(src::Source, params::ModelParams; iflag=1)
+function get_sourceside_wavefield(src::Source, params::TdParams; iflag=1)
 
     N  = params.nz * params.nx
     tmp= zeros(params.data_format, N)
@@ -249,8 +194,8 @@ function get_sourceside_wavefield(src::Source, params::ModelParams; iflag=1)
     pre =  reshape(pre, params.nz, params.nx, params.nt-1)
 
     # set the top to 0
-    if iflag == 2
-       pre[1,:,:] .=0.0
+    if params.free_surface && iflag == 2
+       pre[1,:,:] .= 0.0
     end
 
     return pre

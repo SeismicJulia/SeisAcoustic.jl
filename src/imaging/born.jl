@@ -3,7 +3,7 @@
 axis is time step. The time derivative is approximated by central finite-difference.
 """
 function compute_dpdt!(dpdt::Matrix{Tv}, spt1::Snapshot, spt2::Snapshot, mp::Vector{Tv},
-         src::Source, params::ModelParams, it::Ti) where {Ti<:Int64, Tv<:AbstractFloat}
+         src::Source, params::TdParams, it::Ti) where {Ti<:Int64, Tv<:AbstractFloat}
 
     double_dt = params.data_format(2.0 * params.dt)
 
@@ -32,7 +32,7 @@ end
 finite difference.
 """
 function compute_one_dpdt!(dpdt::Vector{Tv}, spt1::Snapshot, spt2::Snapshot,
-         mp::Vector{Tv}, params::ModelParams) where {Tv<:AbstractFloat}
+         mp::Vector{Tv}, params::TdParams) where {Tv<:AbstractFloat}
 
     N = params.nz * params.nx
     one_over_2dt = params.data_format(1.0 / (2.0 * params.dt))
@@ -54,7 +54,7 @@ end
 """
    compute the source-side wavefield dpdt, time derivative is approximated by central finite-difference.
 """
-function get_sourceside_wavefield(src::Source, ofds::ObsorbFDStencil, params::ModelParams)
+function get_sourceside_wavefield(src::Source, ofds::ObsorbFDStencil, params::TdParams)
 
     # initialize some variables
     spt1 = Snapshot(params)
@@ -95,7 +95,7 @@ end
 of all time-steps are saved in memory.
 """
 function add_virtual_source!(spt::Snapshot, dpdt::Matrix{Tv}, delta_lambda::Vector{Tv},
-         params::ModelParams, it::Ti) where {Tv<:AbstractFloat, Ti<:Int64}
+         params::TdParams, it::Ti) where {Tv<:AbstractFloat, Ti<:Int64}
 
     N = params.nz * params.nx
     for i = 1 : N
@@ -110,7 +110,7 @@ end
 computed on the flight
 """
 function add_virtual_source!(spt::Snapshot, dpdt::Vector{Tv}, delta_lambda::Vector{Tv},
-         params::ModelParams) where {Tv<:AbstractFloat}
+         params::TdParams) where {Tv<:AbstractFloat}
 
     N = params.nz * params.nx
 
@@ -125,7 +125,7 @@ end
    forward born approximation with source side wavefield saved in memory
 """
 function born_approximation_forward!(rec::Recordings, dpdt::Matrix{Tv}, delta_lambda::Vector{Tv},
-         ofds::ObsorbFDStencil, params::ModelParams) where{Ti<:Int64, Tv<:AbstractFloat}
+         ofds::ObsorbFDStencil, params::TdParams) where{Ti<:Int64, Tv<:AbstractFloat}
 
     # initialize intermediate variables
     spt1 = Snapshot(params)
@@ -155,7 +155,7 @@ end
    forward Born approximation with source-side wavefield reconstruction are computed on the flight
 """
 function born_approximation_forward!(rec::Recordings, delta_lambda::Vector{Tv}, src::Source,
-         ofds::ObsorbFDStencil, params::ModelParams) where{Tv<:AbstractFloat}
+         ofds::ObsorbFDStencil, params::TdParams) where{Tv<:AbstractFloat}
 
     # length of model
     N = params.nz * params.nx
@@ -214,7 +214,7 @@ end
 operator of add virtual sources
 """
 function apply_image_condition!(delta_lambda::Vector{Tv}, spt::Snapshot,
-         dpdt::Matrix{Tv}, params::ModelParams, it::Ti) where {Ti<:Int64, Tv<:AbstractFloat}
+         dpdt::Matrix{Tv}, params::TdParams, it::Ti) where {Ti<:Int64, Tv<:AbstractFloat}
 
     N = params.nz * params.nx
 
@@ -229,7 +229,7 @@ end
    the adjoint operator of add virtual source, where the source-side wavefield is computed on the flight
 """
 function apply_image_condition!(delta_lambda::Vector{Tv}, spt::Snapshot, dpdt::Vector{Tv},
-         params::ModelParams) where {Tv<:AbstractFloat}
+         params::TdParams) where {Tv<:AbstractFloat}
 
     N = params.nz * params.nx
 
@@ -244,7 +244,7 @@ end
    The Adjoint operator of Born approximation with source side wavefield saved in memory
 """
 function born_approximation_adjoint(rec::Recordings, dpdt::Matrix{Tv},
-         ofds::ObsorbFDStencil, params::ModelParams) where {Tv<:AbstractFloat}
+         ofds::ObsorbFDStencil, params::TdParams) where {Tv<:AbstractFloat}
 
     # length of gradient
     N = params.nz * params.nx

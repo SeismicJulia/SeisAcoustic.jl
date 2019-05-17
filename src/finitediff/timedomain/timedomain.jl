@@ -8,7 +8,7 @@ export get_gamma_profile,
        Rpz,
        Mpx,
        Rpx,
-       ModelParams,
+       TdParams,
        show,
        model_padding,
        model_smooth,
@@ -80,7 +80,7 @@ export get_gamma_profile,
 
 include("pml.jl")
 include("fdstencil.jl")
-include("modelparams.jl")
+include("tdparams.jl")
 include("snapshot.jl")
 include("source.jl")
 include("recordings.jl")

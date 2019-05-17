@@ -47,7 +47,7 @@
 *  RpxBvx      : FD stencil for updating p_x from v_x, vector length of nz * nx
 *  rvdx        : sparse matrix computing dv/dx
 """
-struct ModelParams{Ti<:Int64, Tv<:AbstractFloat}
+struct TdParams{Ti<:Int64, Tv<:AbstractFloat}
 
     data_format  :: DataType
     nz           :: Ti
@@ -90,9 +90,9 @@ struct ModelParams{Ti<:Int64, Tv<:AbstractFloat}
 end
 
 """
-   Overloading the show function for ModelParams
+   Overloading the show function for TdParams
 """
-function show(io::IO, params::ModelParams)
+function show(io::IO, params::TdParams)
 
     # size of model
     @printf("nz = %4d, nx = %4d, npml = %4d\n", params.nz, params.nx, params.npml)
@@ -402,9 +402,9 @@ function is_stable(vel::Matrix{Tv}, dz::Tv, dx::Tv, dt::Tv) where {Tv<:AbstractF
 end
 
 """
-   the constructor for ModelParams
+   the constructor for TdParams
 """
-function ModelParams(rho, vel, free_surface::Bool, dz, dx, dt, tmax;
+function TdParams(rho, vel, free_surface::Bool, dz, dx, dt, tmax;
          data_format=Float32, fd_flag="taylor", order=2, npml=20, apml=900.) where {Ti<:Int64}
 
     # get the size of the model
@@ -494,7 +494,7 @@ function ModelParams(rho, vel, free_surface::Bool, dz, dx, dt, tmax;
     (RpBv, rvdz, rvdx) = Rpzx(bulk0, dz, dx, dt, fd_coefficients)
 
     # call the default struct constructor
-    return ModelParams(data_format, nz, nx, npml, free_surface, Nz, Nx, ntop,
+    return TdParams(data_format, nz, nx, npml, free_surface, Nz, Nx, ntop,
                        spt2wfd, spt2bnd, bnd2wfd, order,
                        dz, dx, dt, tmax, nt, rho, vel,
                        MvzBvz, MvzBp , RvzBp , dpdz, rpdz,
@@ -528,7 +528,7 @@ end
 # *  fd_coefficients : finite difference coefficients
 # *  order       : the order of precision, will decide the number of layers required for wavefield reconstruction
 # """
-# struct ModelParams{Ti<:Int64, Tv<:AbstractFloat}
+# struct TdParams{Ti<:Int64, Tv<:AbstractFloat}
 #
 #     data_format  :: DataType
 #     nz           :: Ti
@@ -552,9 +552,9 @@ end
 # end
 #
 # """
-#    Overloading the show function for ModelParams
+#    Overloading the show function for TdParams
 # """
-# function show(io::IO, params::ModelParams)
+# function show(io::IO, params::TdParams)
 #
 #     # size of model
 #     @printf("nz = %4d, nx = %4d, npml = %4d\n", params.nz, params.nx, params.npml)
@@ -817,9 +817,9 @@ end
 # end
 #
 # """
-#    the constructor for ModelParams
+#    the constructor for TdParams
 # """
-# function ModelParams(rho, vel, npml::Ti, free_surface::Bool, dz, dx, dt, tmax;
+# function TdParams(rho, vel, npml::Ti, free_surface::Bool, dz, dx, dt, tmax;
 #          data_format=Float32, fd_flag="taylor", order=2) where {Ti<:Int64}
 #
 #     # get the size of the model
@@ -867,7 +867,7 @@ end
 #     (spt2wfd, spt2bnd, bnd2wfd) = get_index(nz, nx, npml, free_surface; order=order)
 #
 #     # call the default struct constructor
-#     return ModelParams(data_format, nz, nx, npml, free_surface, Nz, Nx, ntop,
+#     return TdParams(data_format, nz, nx, npml, free_surface, Nz, Nx, ntop,
 #            spt2wfd, spt2bnd, bnd2wfd, dz, dx, dt, tmax, nt, rho, vel, fd_coefficients)
 #
 # end

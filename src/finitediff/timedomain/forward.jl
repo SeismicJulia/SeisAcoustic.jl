@@ -56,7 +56,7 @@ end
 """
    one step forward modelling
 """
-function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::ModelParams{Ti,Tv},
+function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::TdParams{Ti,Tv},
          tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
          tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
 
@@ -143,7 +143,7 @@ save_type="snapshot" : vz, vx, pz, px include PML part,
 save_type="wavefield": vz, vx, pz+px  without PML part,
 save_type="pressure" : p=pz+px without PML bounary part.
 """
-function multi_step_forward!(path::String, src::Source, params::ModelParams;
+function multi_step_forward!(path::String, src::Source, params::TdParams;
                             save_flag="pressure")
 
     # initialize some variables
@@ -204,7 +204,7 @@ save_type="snapshot" : vz, vx, pz, px include PML part,
 save_type="wavefield": vz, vx, pz+px  without PML part,
 save_type="pressure" : p=pz+px without PML bounary part.
 """
-function multi_step_forward!(path::String, srcs::Vector{Source}, params::ModelParams;
+function multi_step_forward!(path::String, srcs::Vector{Source}, params::TdParams;
                             save_flag="pressure")
 
     # initialize some variables
@@ -263,7 +263,7 @@ end
    compute the recordings via forward modelling with single source, the boundary and the wavefield
 at the last time step are saved if "path_bnd" and "path_wfd" are given.
 """
-function multi_step_forward!(rec::Recordings, src::Source, params::ModelParams;
+function multi_step_forward!(rec::Recordings, src::Source, params::TdParams;
          path_bnd="NULL", path_wfd="NULL")
 
     # initialize variables for time stepping
@@ -321,7 +321,7 @@ end
    compute the recordings via forward modelling with simultaneouse source, the boundary and the wavefield
 at the last time step are saved if "path_bnd" and "path_wfd" are given.
 """
-function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::ModelParams;
+function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::TdParams;
          path_bnd="NULL", path_wfd="NULL")
 
     # initialize variables for time stepping
@@ -380,7 +380,7 @@ end
    one step-forward reconstruction of wavefield via recording the boundary value
 """
 function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield,
-         bnd::WavefieldBound, params::ModelParams,
+         bnd::WavefieldBound, params::TdParams,
          tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
          tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
 
@@ -481,7 +481,7 @@ end
 the source (used for concept proofing)
 """
 function pressure_reconstruct_forward(path_bnd::Ts, src::Source,
-         params::ModelParams) where {Ts <: String}
+         params::TdParams) where {Ts <: String}
 
     # length of one-step pressure field
     N = params.nz * params.nx
@@ -543,7 +543,7 @@ end
 the source (used for concept proofing)
 """
 function pressure_reconstruct_forward(path_bnd::Ts, srcs::Vector{Source},
-         params::ModelParams) where {Ts <: String}
+         params::TdParams) where {Ts <: String}
 
     # length of one-step pressure field
     N = params.nz * params.nx
@@ -606,7 +606,7 @@ function pressure_reconstruct_forward(path_bnd::Ts, srcs::Vector{Source},
 end
 
 # function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield,
-#          bnd::WavefieldBound, params::ModelParams,
+#          bnd::WavefieldBound, params::TdParams,
 #          tmp_a1::Vector{Tv}, tmp_a2::Vector{Tv},
 #          tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
 #          tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
@@ -657,7 +657,7 @@ end
 #     return nothing
 # end
 
-# function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::ModelParams{Ti,Tv},
+# function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::TdParams{Ti,Tv},
 #          tmp_a1::Vector{Tv}, tmp_a2::Vector{Tv},
 #          tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
 #          tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
@@ -716,7 +716,7 @@ end
 # """
 #    compute recordings with a single source
 # """
-# function multi_step_forward!(rec::Recordings, src::Source, params::ModelParams)
+# function multi_step_forward!(rec::Recordings, src::Source, params::TdParams)
 #
 #     # initialize intermediate variables
 #     spt1 = Snapshot(params)
@@ -750,7 +750,7 @@ end
 #    compute recordings with multiple simultaneous source, the only difference is that the input
 # is a vector of source
 # """
-# function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::ModelParams)
+# function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::TdParams)
 #
 #     # initialize intermediate variables
 #     spt1 = Snapshot(params)
@@ -867,7 +867,7 @@ end
 #    one step Forward reconstruction of wave field from the boundary values
 # """
 # function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield, rfds::RigidFDStencil, it::Ti,
-#          bnd::WavefieldBound, tmp1::Vector{Tv}, tmp2::Vector{Tv}, params::ModelParams) where {Ti<:Int64, Tv<:AbstractFloat}
+#          bnd::WavefieldBound, tmp1::Vector{Tv}, tmp2::Vector{Tv}, params::TdParams) where {Ti<:Int64, Tv<:AbstractFloat}
 #
 #     # update vz and vx
 #     A_mul_b!(tmp1, rfds.MvzBp, wfd1.p)
@@ -904,7 +904,7 @@ end
 # save_type="pressure" : p=pz+px without PML bounary part.
 # """
 # function multi_step_forward(path::String, src::Source, ofds::ObsorbFDStencil,
-#          params::ModelParams; save_type="pressure")
+#          params::TdParams; save_type="pressure")
 #
 #     # initialize some variables
 #     spt1 = Snapshot(params)
@@ -960,7 +960,7 @@ end
 #    compute recordings with a single source
 # """
 # function multi_step_forward!(rec::Recordings, src::Source,
-#          ofds::ObsorbFDStencil, params::ModelParams)
+#          ofds::ObsorbFDStencil, params::TdParams)
 #
 #     # initialize intermediate variables
 #     spt1 = Snapshot(params)
@@ -993,7 +993,7 @@ end
 # is a vector of source
 # """
 # function multi_step_forward!(rec::Recordings, srcs::Vector{Source},
-#          ofds::ObsorbFDStencil, params::ModelParams)
+#          ofds::ObsorbFDStencil, params::TdParams)
 #
 #     # initialize intermediate variables
 #     spt1 = Snapshot(params)
@@ -1026,7 +1026,7 @@ end
 # save them to hard drive.
 # """
 # function get_boundary_wavefield(path_bnd::String, path_wfd::String,
-#          src::Source, ofds::ObsorbFDStencil, params::ModelParams)
+#          src::Source, ofds::ObsorbFDStencil, params::TdParams)
 #
 #     # one extra time step
 #     nt = params.nt + 1
@@ -1073,7 +1073,7 @@ end
 # the source (used for concept proofing)
 # """
 # function pressure_reconstruct_forward(bnd::WavefieldBound, rfds::RigidFDStencil,
-#          src::Source, params::ModelParams)
+#          src::Source, params::TdParams)
 #
 #     # length of one-step pressure field
 #     N = params.nz * params.nx

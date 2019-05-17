@@ -15,7 +15,7 @@ end
    constructor for recordings
 """
 function Recordings(rz::Vector, rx::Vector,
-         params::ModelParams; location_flag="index")
+         params::TdParams; location_flag="index")
 
     # number of receivers
     nr  = length(rz)
