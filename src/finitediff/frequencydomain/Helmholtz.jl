@@ -91,7 +91,7 @@ end
 """
    create the parameter structure for frequency domain finite difference method
 """
-function FdParams(rho, vel, h, free_surface::Bool;
+function FdParams(rho, vel, free_surface::Bool, h;
          data_format=Float32, npml=20, apml=900.)
 
     # get the size of the model

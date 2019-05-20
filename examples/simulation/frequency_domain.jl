@@ -17,8 +17,8 @@ h = 10
 dt = 0.001; tmax = 2.0;  # use second as unit
 
 # organize these parameters into a structure
-fparams = FdParams(rho, vel, h, free_surface; data_format=Float64);
-tparams = ModelParams(rho, vel, free_surface, h, h, dt, tmax; data_format=Float64);
+fparams = FdParams(rho, vel, free_surface, h; data_format=Float64);
+tparams = TdParams(rho, vel, free_surface, h, h, dt, tmax; data_format=Float64);
 
 # single source
 src = Source(2, 150, fparams; dt=dt, amp=100000);
