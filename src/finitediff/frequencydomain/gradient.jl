@@ -1,10 +1,18 @@
+# inject the residues
+b = zeros(Complex{Float64}, params.Nz * params.Nx)
+for i = 1 : length(dres.spt2rec)
+    j = dres.spt2rec[i]
+    b[j] = conj(dres.p[i])
+end
+
+
 """
    compute the gradient of objective function with respect to velocity model for one
 frequency slice, u is source side wavefield, dres is the residue, H is the LU factorization
 of Helmhotz operator
 """
-function velocity_gradient(dres::Recordings, u::Vector{Complex{Float64}},
-         H, params::FdParams)
+function velocity_gradient(b::Vector{Tv}, u::Vector{Tv},
+         H, params::FdParams) where {Tv<:Complex{Float64}}
 
     # create a table save the coefficients for mass acceleration average
     T = OffsetArray{Float64}(undef, -1:1, -1:1)
@@ -14,13 +22,6 @@ function velocity_gradient(dres::Recordings, u::Vector{Complex{Float64}},
     T[-1,-1]=w3; T[-1, 0]=w2; T[-1, 1]=w3;
     T[ 0,-1]=w2; T[ 0, 0]=w1; T[ 0, 1]=w2;
     T[ 1,-1]=w3; T[ 1, 0]=w2; T[ 1, 1]=w3;
-
-    # inject the residues
-    b = zeros(Complex{Float64}, params.Nz * params.Nx)
-    for i = 1 : length(dres.spt2rec)
-        j = dres.spt2rec[i]
-        b[j] = conj(dres.p[i])
-    end
 
     # compute adjoint wavefield
     u_adj = zeros(Complex{Float64}, params.Nz, params.Nx)
