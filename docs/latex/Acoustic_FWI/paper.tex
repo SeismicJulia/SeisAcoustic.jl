@@ -78,7 +78,7 @@ As the source term is additive, it can be added to either one of the last two eq
 
 \subsection{Discretization of Acoustic wave equation}
 
-We use stagger grid finite difference method to discretize equation \ref{eq2}, the particle $v_z$ is put on the stagger grid $[i+\frac{1}{2},j,it]$, horizontal particle velocity $v_x$ is put on the stagger grid $[i, j+\frac{1}{2}, k]$, and the pressure component is put on the grid $[i,j,it+\frac{1}{2}]$. Where $i,j,it$ are the grid index in vertical, horizontal, time directions, respectively. Figure \ref{f1} shows the locations of wave field components and model parameters, respectively.
+We use stagger grid finite difference method to discretize equation \ref{eq2}, the particle $v_z$ is put on the stagger grid $[i+\frac{1}{2},j,it]$, horizontal particle velocity $v_x$ is put on the stagger grid $[i, j+\frac{1}{2}, it]$, and the pressure component is put on the grid $[i,j,it+\frac{1}{2}]$. Where $i,j,it$ are the grid index in vertical, horizontal, time directions, respectively. Figure \ref{f1} shows the locations of wave field components and model parameters, respectively.
 \begin{figure}[htb] 
    \centering
    \includegraphics[width=0.6\columnwidth]{Fig/f1.pdf} 
@@ -427,7 +427,7 @@ The finite difference form of this equation is given as
 \begin{equation}
 \begin{split}
 &p_x[i,j,it+\frac{3}{2}] = \frac{2-dt \, \gamma_x[j]}{2+dt \, \gamma_x[j]} p_x[i,j,it+\frac{1}{2}]  \\
-&+ \frac{2k[i,j]\, dt}{2+dt \, \gamma_x[j]} \left(\frac{1}{dx} \sum_{n=1}^N  a_n \left(v_x[i,j+n-\frac{1}{2},it+1] - v_x[i,j-n+\frac{1}{2},it+1] \right) \right) + dt \cdot f[k+1] 
+&+ \frac{2k[i,j]\, dt}{2+dt \, \gamma_x[j]} \left(\frac{1}{dx} \sum_{n=1}^N  a_n \left(v_x[i,j+n-\frac{1}{2},it+1] - v_x[i,j-n+\frac{1}{2},it+1] \right) \right) + dt \cdot f[it+1] 
 \end{split}
 \label{eq33}
 \end{equation}
@@ -440,7 +440,7 @@ Outside of the PML absorbing area, the damping coefficients $\gamma_x$ is reduce
 \begin{equation}
 \begin{split}
 &p_x[i,j,it+\frac{3}{2}] =  p_x[i,j,it+\frac{1}{2}]  \\
-&+k[i,j]\, dt \left(\frac{1}{dx} \sum_{n=1}^N  a_n \left(v_x[i,j+n-\frac{1}{2},it+1] - v_x[i,j-n+\frac{1}{2},it+1] \right) \right) + dt \cdot f[k+1]
+&+k[i,j]\, dt \left(\frac{1}{dx} \sum_{n=1}^N  a_n \left(v_x[i,j+n-\frac{1}{2},it+1] - v_x[i,j-n+\frac{1}{2},it+1] \right) \right) + dt \cdot f[it+1]
 \end{split}
 \label{eq35}
 \end{equation}
@@ -512,7 +512,7 @@ The discretized wave-equation is given as
 & p_z[i,j,it+\frac{3}{2}] = \frac{2-dt \, \gamma_z[i]}{2+dt \, \gamma_z[i]} p_z[i,j,it+\frac{1}{2}]  \\
 & + \frac{2k[i,j] \, dt}{2+dt \, \gamma_z[i] } \left(\frac{1}{dz} \sum_{n=1}^N  a_n \left( v_z[i+n-\frac{1}{2},j,it+1] - v_z[i-n+\frac{1}{2},j,it+1] \right)  \right) \\
 &p_x[i,j,it+\frac{3}{2}] = \frac{2-dt \, \gamma_x[j]}{2+dt \, \gamma_x[j]} p_x[i,j,it+\frac{1}{2}]  \\
-&+ \frac{2k[i,j]\, dt}{2+dt \, \gamma_x[j]} \left(\frac{1}{dx} \sum_{n=1}^N  a_n \left(v_x[i,j+n-\frac{1}{2},it+1] - v_x[i,j-n+\frac{1}{2},it+1] \right) \right) + dt \cdot f[k+1]  \\
+&+ \frac{2k[i,j]\, dt}{2+dt \, \gamma_x[j]} \left(\frac{1}{dx} \sum_{n=1}^N  a_n \left(v_x[i,j+n-\frac{1}{2},it+1] - v_x[i,j-n+\frac{1}{2},it+1] \right) \right) + dt \cdot f[it+1]  \\
 \end{split}
 \label{eq39}
 \end{equation}
@@ -649,7 +649,7 @@ Where ${\bf f}^{it}$ represented the source-signature at $it^{th}$ time step. ${
 \left( \frac{1}{dx} \sum_{n=1}^N  a_n \left( p[i,j+n,it+\frac{1}{2}] - p[i,j-n+1,it+\frac{1}{2}]\right) \right) \\
 & p_z[i,j,it+\frac{3}{2}] =  p_z[i,j,it+\frac{1}{2}] + k[i,j] \, dt \left(\frac{1}{dz} \sum_{n=1}^N  a_n \left( v_z[i+n-\frac{1}{2},j,it+1] - v_z[i-n+\frac{1}{2},j,it+1] \right)  \right) \\
 &p_x[i,j,it+\frac{3}{2}] =  p_x[i,j,it+\frac{1}{2}]+ k[i,j]\, dt \left(\frac{1}{dx} \sum_{n=1}^N  a_n \left(v_x[i,j+n-\frac{1}{2},it+1] - v_x[i,j-n+\frac{1}{2},it+1] \right) \right) \\
-&+ dt \cdot f[k+1]   
+&+ dt \cdot f[it+1]   
 \end{split}
 \label{eq46}
 \end{equation}
@@ -1147,7 +1147,7 @@ where ${\bf L}_v  {\bf u}^{it-1} $ is expanded as
 With this form, equation \ref{eq68} can be written as
 \begin{equation}
 \begin{split}
-\frac{\partial {\bf L}}{\partial m_l} {\bf u}_{k-1} &=  
+\frac{\partial {\bf L}}{\partial m_l} {\bf u}_{it-1} &=  
 \begin{bmatrix}
 \bf{0}   & \bf{0}   & \bf{0} & \bf{0}   \\
 \bf{0}   & \bf{0}   & \bf{0} & \bf{0}   \\
