@@ -1,11 +1,3 @@
-# inject the residues
-b = zeros(Complex{Float64}, params.Nz * params.Nx)
-for i = 1 : length(dres.spt2rec)
-    j = dres.spt2rec[i]
-    b[j] = conj(dres.p[i])
-end
-
-
 """
    compute the gradient of objective function with respect to velocity model for one
 frequency slice, u is source side wavefield, dres is the residue, H is the LU factorization
@@ -59,4 +51,39 @@ function velocity_gradient(b::Vector{Tv}, u::Vector{Tv},
 
     return real(g)
 
+end
+
+
+# velocity and density model
+nz = 101; nx = 301
+vel = 3000 * ones(nz, nx);  # m/s
+vel[51:end,:] .= 3500;  # m/s
+rho = 2000 * ones(nz, nx);  # kg/m^3
+
+# top boundary condition
+free_surface = true    #(pml or free_surface)
+
+# grid size
+h = 10
+
+# organize these parameters into a structure
+fparams = FdParams(rho, vel, free_surface, h; data_format=Float64);
+
+# LU decomposition of Helmhotz operator
+omega = 2.0 * pi * 10.0;
+H = get_helmholtz_LU(fparams, omega)
+
+# generate observations of one frequency slice
+
+
+
+
+
+
+
+# inject the residues
+b = zeros(Complex{Float64}, params.Nz * params.Nx)
+for i = 1 : length(dres.spt2rec)
+    j = dres.spt2rec[i]
+    b[j] = conj(dres.p[i])
 end
