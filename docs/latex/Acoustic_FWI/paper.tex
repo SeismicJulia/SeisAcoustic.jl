@@ -1232,7 +1232,7 @@ As we discussed in the equation \ref{eq28}, ${\bf M}_{pz}{\bf B}_{pz}$ and ${\bf
 \begin{equation}
 \begin{split}
 \tilde{p}_z^{it-1+\frac{1}{2}} = {{\bf d}_p{\bf d}_z}^T \cdot {{\bf M}_{vz}{\bf B}_{p}} \cdot \tilde{v}_z^{it-1} +  {{\bf d}_p{\bf d}_x}^T \cdot {{\bf M}_{vx}{\bf B}_{p}} \cdot \tilde{v}_x^{it-1} + \tilde{p}_z^{it+\frac{1}{2}} \\  
-\tilde{p}_z^{it-1+\frac{1}{2}} = {{\bf d}_p{\bf d}_z}^T \cdot {{\bf M}_{vz}{\bf B}_{p}} \cdot \tilde{v}_z^{it-1}+  {{\bf d}_p{\bf d}_x}^T \cdot {{\bf M}_{vx}{\bf B}_{p}} \cdot \tilde{v}_x^{it-1} + \tilde{p}_z^{it+\frac{1}{2}} \\  
+\tilde{p}_x^{it-1+\frac{1}{2}} = {{\bf d}_p{\bf d}_z}^T \cdot {{\bf M}_{vz}{\bf B}_{p}} \cdot \tilde{v}_z^{it-1}+  {{\bf d}_p{\bf d}_x}^T \cdot {{\bf M}_{vx}{\bf B}_{p}} \cdot \tilde{v}_x^{it-1} + \tilde{p}_x^{it+\frac{1}{2}} \\  
 \end{split}
 \label{eq75}
 \end{equation}
@@ -1304,13 +1304,13 @@ Subtracting equation \ref{eq83} by equation \ref{eq82} and ignore the higher ord
 \begin{split}
 \frac{\partial \Delta v_z}{\partial t} &= b \frac{\partial }{\partial z} \left(\Delta p_z  + \Delta p_x \right) \\
 \frac{\partial \Delta v_x}{\partial t} &=  b \frac{\partial }{\partial x} \left(\Delta p_z  + \Delta p_x \right) \\
-\frac{\partial  \Delta p}{\partial t} &= k \left( \frac{\partial  \Delta v_z}{\partial z} +  \frac{\partial  \Delta v_z}{\partial z} \right) + 2\rho v \Delta v \left( \frac{\partial v_z}{\partial z} +  \frac{\partial v_z}{\partial z} \right) \\
+\frac{\partial  \Delta p}{\partial t} &= k \left( \frac{\partial  \Delta v_z}{\partial z} +  \frac{\partial  \Delta v_x}{\partial x} \right) + 2\rho v \Delta v \left( \frac{\partial v_z}{\partial z} +  \frac{\partial v_x}{\partial x} \right) \\
 \end{split}
 \label{eq84}
 \end{equation}
 From the last equation of equations \ref{eq82}, we know
 \begin{equation}
-\frac{\partial v_z}{\partial z} +  \frac{\partial v_z}{\partial z}  = \frac{\frac{\partial p}{\partial t} - f(t)}{k}
+\frac{\partial v_z}{\partial z} +  \frac{\partial v_x}{\partial x}  = \frac{\frac{\partial p}{\partial t} - f(t)}{k}
 \label{eq85}
 \end{equation}
 We can use this equation to replace the terms in equation \ref{eq83}, we can get

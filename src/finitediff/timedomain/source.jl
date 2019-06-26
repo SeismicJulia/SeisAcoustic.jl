@@ -228,6 +228,7 @@ function get_multi_sources(sz::Vector, sx::Vector, params::TdParams; location_fl
        error("length of dominant frequency is wrong")
     end
 
+    wavelet = Vector{Vector{params.data_format}}(undef, ns)
     if length(p) == 0  # without user provided wavelet
        if typeof(type_flag) == String               # all sources share same wavelet
           wavelet_type = Vector{String}(undef, ns)
@@ -240,7 +241,6 @@ function get_multi_sources(sz::Vector, sx::Vector, params::TdParams; location_fl
        end
 
        # generate the specific source wavelet
-       wavelet = Vector{Vector{params.data_format}}(undef, ns)
        for i = 1 : ns
            if type_flag[i] == "ricker"
               tmp = amp[i] * ricker(fdom[i], params.dt)
@@ -257,13 +257,11 @@ function get_multi_sources(sz::Vector, sx::Vector, params::TdParams; location_fl
        end
 
     elseif eltype(p) <: AbstractFloat   # all sources share same user-given wavelet
-       wavelet = Vector{Vector{params.data_format}}(undef, ns)
        for i = 1 : ns
            wavelet[i] = convert(Vector{params.data_format}, p)
        end
 
     else                                # sources have different user-given wavelet
-       wavelet = Vector{Vector{params.data_format}}(undef, ns)
        for i = 1 : ns
            wavelet[i] = convert(Vector{params.data_format}, p[i])
        end

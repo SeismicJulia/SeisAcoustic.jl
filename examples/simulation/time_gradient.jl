@@ -42,18 +42,15 @@ multi_step_forward!(rec, src, params; path_bnd=path_bnd, path_wfd=path_wfd)
 SeisPlotTX(rec.p)
 
 # compute source-side wavefield
-pre1 = source_side_wavefield(path_bnd, path_wfd, src, params);
-pre2 = get_sourceside_wavefield(src, params; iflag=1);
-pre3 = get_sourceside_wavefield(src, params; iflag=2);
+pre1 = get_sourceside_wavefield(src, params; iflag=1);
+pre2 = get_sourceside_wavefield(src, params; iflag=2);
 
 # check the consistent of the value
 norm(pre1 - pre2) / norm(pre1);
-norm(pre1 - pre3) / norm(pre1);
 
 it = 399
 SeisPlotTX(pre1[:,:,it], cmap="seismic", wbox=9, hbox=3)
 SeisPlotTX(pre2[:,:,it], cmap="seismic", wbox=9, hbox=3)
-SeisPlotTX(pre3[:,:,it], cmap="seismic", wbox=9, hbox=3)
 
 # ==============================================================================
 #            check the analytical gradient against numerical gradient
@@ -117,8 +114,8 @@ SeisPlotTX(dres.p, cmap="seismic", pclip=98,
            xlabel="Traces", ylabel="Time (s)", dy=0.001)
 
 # get the gradient
-@time g_adj = velocity_gradient(dres, path_bnd, path_wfd, src, params0);
-g_adj = reshape(g_adj, nz, nx)
+g_adj = velocity_gradient(dres, path_bnd, path_wfd, src, params0);
+g_adj = reshape(g_adj, nz, nx);
 SeisPlotTX(g_adj, cmap="seismic", wbox=9, hbox=3)
 
 # ==============================================================================
@@ -128,7 +125,7 @@ vel0    = 3000 * ones(nz, nx);
 delta_m = 1e-7;
 
 # one model parameter's gradient
-iz = 51; ix = 201;
+iz = 55; ix = 151;
 
 # positive velocity model partubation
 vel0[iz,ix] = vel0[iz,ix] + delta_m

@@ -8,7 +8,7 @@ rho = 2000 * ones(nz, nx);  # kg/m^3
 rho[25:end,:] .= 2300;  # m/s
 
 # top boundary condition
-free_surface = true    #(pml or free_surface)
+free_surface = true   #(pml or free_surface)
 
 # grid size
 h = 10
@@ -20,9 +20,6 @@ dt = 0.001; tmax = 2.0;  # use second as unit
 fparams = FdParams(rho, vel, free_surface, h; data_format=Float64);
 tparams = TdParams(rho, vel, free_surface, h, h, dt, tmax; data_format=Float64);
 
-# single source
-src = Source(2, 150, fparams; dt=dt, amp=100000);
-
 # recordings
 # initialize recordings
 irx = collect(1 : 2 : fparams.nx);
@@ -30,9 +27,28 @@ irz = 2 * ones(length(irx));
 rec_f = Recordings(irz, irx, dt, tmax, fparams);
 rec_t = Recordings(irz, irx, tparams);
 
-# generate recordings
-get_recordings!(rec_f, src, fparams, print_flag=true);
-multi_step_forward!(rec_t, src, tparams);
+# # single source
+# src = Source(2, 150, dt, fparams; amp=100000);
+#
+# # generate recordings
+# get_recordings!(rec_f, src, fparams, print_flag=true, consistent_flag=true);
+# multi_step_forward!(rec_t, src, tparams);
+
+# multiple sources
+isx = collect(10:50:nx-10)
+isz = 3 * ones(Int64, length(isx))
+srcs = get_multi_sources(isz, isx, dt, fparams; amp=100000);
+get_recordings!(rec_f, srcs, fparams, print_flag=true, consistent_flag=true);
+multi_step_forward!(rec_t, srcs, tparams);
+
+SeisPlotTX(rec_f.p);
+SeisPlotTX(rec_t.p);
+figure(); plot(rec_f.p[:,40]); plot(rec_t.p[:,40]);
+
+
+#===============================================================================
+#            simultaneouse source simulation in frequency domain
+#===============================================================================
 
 # forward modeling in frequency domain
 pre_f = get_wavefield_FDFD(src, fparams; tmax=tmax, print_flag=true);

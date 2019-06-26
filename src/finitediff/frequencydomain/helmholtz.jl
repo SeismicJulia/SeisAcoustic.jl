@@ -430,10 +430,12 @@ function get_helmholtz_LU(params::FdParams, omega)
        nnz = nnz + 1 + 1 + 4 * 2              # four corners
        nnz = nnz + params.Nx - 2              # upper
        nnz = nnz + (params.Nx-2) * 6          # bottom
+
     else
        nnz = nnz + 4*4                        # four corners
        nnz = nnz + (params.Nx-2)*6*2          # upper and bottom
     end
+
     nnz = nnz + (params.Nz-2)*6*2             # left and right
     nnz = nnz + (params.Nz-2)*(params.Nx-2)*9 # inner part
 
@@ -475,7 +477,7 @@ function get_helmholtz_LU(params::FdParams, omega)
             row_idx[icount] = row_val
             col_idx[icount] = col_val
             if (i1 == 1) && params.free_surface
-               nzval[icount] = omega2 / k[i,j]
+               nzval[icount] = -omega2 / k[i,j]
             else
                nzval[icount] = (-w1 * omega2 / k[i,j]
                                 +alpha * one_over_h2  * ( d1o * (b[1,0]*d1p + b[-1,0]*d1m)
@@ -568,7 +570,6 @@ function get_helmholtz_LU(params::FdParams, omega)
                                      -beta  * one_over_4h2 * ( d2o*(b[-1,1]*d2p + b[1,1]*d2p)
                                                               -d1o*(b[1,1]*d1p + b[-1,1]*d1m)))
                end
-
             end
 
             # node(1, 1)
@@ -601,8 +602,8 @@ end
 """
    generate source for frequency domain finite difference
 """
-function Source(sz, sx, params::FdParams; location_flag="index", ot=0.0, dt=0.001, amp=1.0, fdom=20.0, hl=128,
-                type_flag="ricker", p=Vector{Float32}(undef,0))
+function Source(sz, sx, dt, params::FdParams;
+                location_flag="index", ot=0.0, amp=1.0, fdom=20.0, hl=128, type_flag="ricker", p=Vector{Float32}(undef,0))
 
     # source location given index
     if location_flag == "index"
@@ -661,23 +662,136 @@ function Source(sz, sx, params::FdParams; location_flag="index", ot=0.0, dt=0.00
 end
 
 """
+   get multiple sources which are put into a vector
+"""
+function get_multi_sources(sz::Vector, sx::Vector, dt, params::FdParams;
+                           location_flag="index", ot=0.0, amp=1.0, fdom=20.0, hl=128, type_flag="ricker", p=Vector{Float32}(undef,0))
+
+    # number of source
+    ns = length(sz)
+    if length(sx) != ns
+       error("length of source coordinate mismatch")
+    end
+
+    # source location given index
+    isz = zeros(Int64, ns)
+    isx = zeros(Int64, ns)
+    if location_flag == "index"
+       for i = 1 : ns
+           isz[i] = round(Int64, sz[i])
+           isx[i] = round(Int64, sx[i])
+       end
+
+    # source location given as distance
+    elseif location_flag == "distance"
+       isz[i] = round(Int64, sz[i]/params.h) + 1
+       isx[i] = round(Int64, sx[i]/params.h) + 1
+    else
+       error("wrong specification of source location")
+    end
+
+    # error checking
+    for i = 1 : ns
+        if isz[i] > params.nz || isx[i] > params.nx
+           error("source located outside of modeling area")
+        end
+    end
+
+    # starting time
+    if typeof(ot) <: Real  # all sources starting at same time
+       ot = ot * ones(ns)
+    end
+    if length(ot) != ns
+       error("length of starting time ot mismatch")
+    end
+
+    # amplitude for each source
+    if typeof(amp) <: Real
+       amp = amp * ones(ns)
+    end
+    if length(amp) != ns
+       error("length of amplitude is wrong")
+    end
+
+    # dominant frequency for source wavelet
+    if typeof(fdom) <: Real
+       fdom = fdom * ones(ns)
+    end
+    if length(fdom) != ns
+       error("length of dominant frequency is wrong")
+    end
+
+    # multiple source function are put into a vector
+    wavelet = Vector{Vector{params.data_format}}(undef, ns)
+    if length(p) == 0  # user don't provided wavelet
+       if typeof(type_flag) == String               # all sources share same wavelet
+          wavelet_type = Vector{String}(undef, ns)
+          wavelet_type[:] .= type_flag
+          type_flag    = wavelet_type
+
+       elseif typeof(type_flag) == Vector{String}   # use different wavelet
+          if length(type_flag) != ns
+             error("length of type_flag mismatch")
+          end
+       end
+
+       # generate the specific source wavelet
+       for i = 1 : ns
+           if type_flag[i] == "ricker"
+              tmp = amp[i] * ricker(fdom[i], dt)
+              wavelet[i] = convert(Vector{params.data_format}, tmp)
+
+           elseif type_flag[i] == "miniphase"
+              tmp = ricker(fdom[i], dt)
+              tmp = amp[i] * convert2miniphase(tmp)
+              wavelet[i] = convert(Vector{params.data_format}, tmp)
+
+           elseif type_flag[i] == "sinc"
+              hl   = round(Int64, hl)
+              tmp  = amp[i] * tapered_sinc(fdom[i], hl, dt)
+              wavelet[i] = convert(Vector{params.data_format}, tmp)
+           end
+       end
+
+    elseif eltype(p) <: AbstractFloat   # all sources share same user-given wavelet
+       for i = 1 : ns
+           wavelet[i] = convert(Vector{params.data_format}, p)
+       end
+
+    else                                # sources have different user-given wavelet
+       for i = 1 : ns
+           wavelet[i] = convert(Vector{params.data_format}, p[i])
+       end
+    end
+
+    # allocate memory for vector of sources
+    srcs = Vector{Source}(undef, ns)
+    for i = 1 : ns
+        srcs[i] = Source(isz[i], isx[i], dt, params; p=wavelet[i], ot=ot[i])
+    end
+    return srcs
+end
+
+"""
    get the forward modeling wavefield via frequency domain finite difference
 """
 function get_wavefield_FDFD(src::Source, params::FdParams;
-         flower=0.0, fupper=60.0, tmax=2.0, print_flag=false)
+         flower=0.0, fupper=60.0, tmax=2.0, print_flag=false, consistent_flag=false)
 
     # length of wavefield
     N = params.nz * params.nx
 
     # number of time samples
     nt = floor(Int64, tmax / src.dt) + 1
+    if nt < src.it_max
+       error("tmax isn't big enough")
+    end
 
     # allocate space for 3D wavefield [nz*nx, nt]
     pressure = zeros(Complex{Float64}, N, nt)
 
-    # frequency interval
-    fmax = 1.0  / src.dt
-    df   = fmax / nt
+    # frequency sampling interval
+    df = 1.0 / (src.dt * nt)
 
     # lower frequency index bound
     iw_lower = floor(Int64, flower / df) + 1
@@ -689,12 +803,11 @@ function get_wavefield_FDFD(src::Source, params::FdParams;
     iw_upper = ceil(Int64, fupper / df) + 1
     if iw_upper > floor(Int64, nt / 2) + 1
        iw_upper = floor(Int64, nt / 2) + 1
-       fmax = (iw_upper-1)*df
     end
 
     # allocate space for source time function
     wlet = zeros(nt)
-    copyto!(wlet, src.it_min, convert(Vector{Float64},src.p))
+    copyto!(wlet, src.it_min, src.p)
 
     # transform to frequency domain
     fwave = fft(wlet)
@@ -712,9 +825,15 @@ function get_wavefield_FDFD(src::Source, params::FdParams;
         # build damping profile
         H = get_helmholtz_LU(params, omega)
 
-        #the correct way to implement source
-        bulk = params.rho[src.isz, src.isx] * params.vel[src.isz, src.isx] * params.vel[src.isz, src.isx]
-        b[src.src2spt] = im * omega * fwave[iw] / bulk
+        # two ways to inject source
+        if consistent_flag
+           bulk = params.rho[src.isz, src.isx] * params.vel[src.isz, src.isx] * params.vel[src.isz, src.isx]
+           b[src.src2spt] = im * omega * fwave[iw] / bulk
+        else
+           b[src.src2spt] = fwave[iw]
+        end
+
+        # solve implicit wave equation
         ldiv!(u, H, b)
 
         # save the pressure component
@@ -806,13 +925,13 @@ end
    get the recordings via frequency domain finite difference
 """
 function get_recordings!(rec::Recordings, src::Source, params::FdParams;
-         flower=0.0, fupper=60.0, print_flag=false) where {Ti <: Int64}
-
-    # length of wavefield
-    N = params.nz * params.nx
+         flower=0.0, fupper=60.0, print_flag=false, consistent_flag=false) where {Ti <: Int64}
 
     # number of time samples
     nt = rec.nt
+    if nt < src.it_max
+       error("simulation length is less than the length of source wavelet")
+    end
 
     # check the time sample interval
     if rec.dt != src.dt
@@ -820,8 +939,7 @@ function get_recordings!(rec::Recordings, src::Source, params::FdParams;
     end
 
     # frequency interval
-    fmax = 1.0  / src.dt
-    df   = fmax / nt
+    df   = 1.0 / (src.dt * nt)
 
     # lower frequency index bound
     iw_lower = floor(Int64, flower / df) + 1
@@ -833,12 +951,11 @@ function get_recordings!(rec::Recordings, src::Source, params::FdParams;
     iw_upper = ceil(Int64, fupper / df) + 1
     if iw_upper > floor(Int64, nt / 2) + 1
        iw_upper = floor(Int64, nt / 2) + 1
-       fmax = (iw_upper-1)*df
     end
 
     # allocate space for source time function
     wlet = zeros(nt)
-    copyto!(wlet, src.it_min, convert(Vector{Float64},src.p))
+    copyto!(wlet, src.it_min, src.p)
 
     # transform to frequency domain
     fwave = fft(wlet)
@@ -859,10 +976,119 @@ function get_recordings!(rec::Recordings, src::Source, params::FdParams;
         # build damping profile
         H = get_helmholtz_LU(params, omega)
 
-        #the correct way to implement source
-        bulk = params.rho[src.isz, src.isx] * params.vel[src.isz, src.isx] * params.vel[src.isz, src.isx]
-        b[src.src2spt] = im * omega * fwave[iw] / bulk
+        # two ways to inject source
+        if consistent_flag
+           bulk = params.rho[src.isz, src.isx] * params.vel[src.isz, src.isx] * params.vel[src.isz, src.isx]
+           b[src.src2spt] = im * omega * fwave[iw] / bulk
+        else
+           b[src.src2spt] = fwave[iw]
+        end
+
+        # solve implicit equation
         ldiv!(u, H, b)
+
+        # save the pressure component
+        for i = 1 : rec.nr
+            idx = rec.spt2rec[i]
+            p[iw,i]     = u[idx]
+            p[nt-iw+2,i]= conj(u[idx])
+        end
+
+        # print the frequency slice
+        if print_flag
+           println("finished $iw")
+        end
+    end
+
+    # transform back to time domain
+    ifft!(p, 1)
+    p = real(p)
+
+    # copy to recordings
+    copyto!(rec.p, 1, p)
+
+    return nothing
+end
+
+"""
+   get the recordings via frequency domain finite difference for the simultaneous source case
+"""
+function get_recordings!(rec::Recordings, srcs::Vector{Source}, params::FdParams;
+         flower=0.0, fupper=60.0, print_flag=false, consistent_flag=false) where {Ti <: Int64}
+
+    # number of sources
+    ns = length(srcs)
+
+    # number of time samples
+    nt = rec.nt
+    for i = 1 : ns
+        if nt < srcs[i].it_max
+           error("simulation length is less than the length of source wavelet")
+        end
+
+        # check the time sample interval
+        if rec.dt != srcs[i].dt
+           error("time sample interval doesn't match")
+        end
+    end
+
+    # frequency interval
+    df   = 1.0 / (srcs[1].dt * nt)
+
+    # lower frequency index bound
+    iw_lower = floor(Int64, flower / df) + 1
+    if iw_lower < 2
+       iw_lower = 2
+    end
+
+    # upper frequency index bound
+    iw_upper = ceil(Int64, fupper / df) + 1
+    if iw_upper > floor(Int64, nt / 2) + 1
+       iw_upper = floor(Int64, nt / 2) + 1
+    end
+
+    # convert the source wavelet to frequency domain
+    fwave = Vector{Vector{Complex{Float64}}}(undef, ns)
+    wlet  = zeros(nt)
+    for i = 1 : ns
+        copyto!(wlet, srcs[i].it_min, srcs[i].p)
+        fwave[i] = fft(wlet)
+        fill!(wlet, 0.0)
+    end
+
+    # allocate space for left and right hand side
+    b = zeros(Complex{Float64}, params.Nz * params.Nx)
+    u = zeros(Complex{Float64}, params.Nz * params.Nx)
+
+    # the pressure component
+    p = zeros(Complex{Float64}, nt, rec.nr)
+
+    # loop over all frequency slice
+    for iw = iw_lower : iw_upper
+
+        # radian frequency
+        omega = 2.0 * pi * (iw-1) * df
+
+        # build damping profile
+        H = get_helmholtz_LU(params, omega)
+
+        for i = 1 : ns
+            # two ways to inject source
+            if consistent_flag
+               bulk = params.rho[srcs[i].isz, srcs[i].isx] * params.vel[srcs[i].isz, srcs[i].isx] * params.vel[srcs[i].isz, srcs[i].isx]
+               b[srcs[i].src2spt] += im * omega * fwave[i][iw] / bulk
+            else
+               b[srcs[i].src2spt] += fwave[i][iw]
+            end
+        end
+
+        # solve implicit equation
+        ldiv!(u, H, b)
+
+        # clean b to prepare for next frequency slice
+        for i = 1 : ns
+            b[srcs[i].src2spt] = zero(Complex{Float64})
+        end
 
         # save the pressure component
         for i = 1 : rec.nr

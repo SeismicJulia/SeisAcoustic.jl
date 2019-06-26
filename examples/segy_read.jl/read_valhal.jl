@@ -1,8 +1,8 @@
 using SeisAcoustic
 
 # the path to segy file which include 3 sourec lines 4 component OBC data
-work_dir = "/home/wgao1/BP_valhall/line2";
-path_sgy = joinpath(work_dir, "shot_line2.sgy");
+work_dir = "/home/wgao1/BP_valhall/line1";
+path_sgy = joinpath(work_dir, "line_666_668.segy");
 
 # read text file header
 text_header = read_text_header(path_sgy);
@@ -13,14 +13,15 @@ file_header = read_file_header(path_sgy);
 
 # total number of traces
 tmp = filesize(path_sgy);
-num_traces = convert(Int64, (tmp - 3600) / (240+sizeof(Float32)*fhdr.ns))
+num_traces = convert(Int64, (tmp - 3600) / (240+sizeof(Float32) * file_header.ns))
 
 # read all the trace header
-traces_header = extract_traces_header(path_sgy; print_interval=10000);
+traces_header = extract_traces_header(path_sgy; print_interval=100000);
 
 # create quick lookup table for shot gathers
-path_tab = joinpath(work_dir, "lookup_table.txt");
+path_tab = joinpath(work_dir, "lookup_table_obc.txt");
 create_lookup_table(path_tab, path_sgy);
+
 
 # creat acquisition geometry from shot gather
 (sx, sy, gx, gy) = create_acquisition_geometry(traces_header; num_component=4);
