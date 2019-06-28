@@ -1583,6 +1583,41 @@ To facilitate coding, we group the common terms in equation \ref{eq110} together
 \subsection{Mixed grid}
 By combining the finte-difference grid based on Cartesian and the rotated coordinate system, we can get the mixed-grid finite-difference stencil. This process includes two steps:
 
+\subsubsection{Connection between first order and second order Acoustic wave equation}
+The first order acoustic wave equation is expressed  as
+\begin{equation}
+\begin{split}
+ \frac{\partial v_z}{\partial t} &=  b \frac{\partial p}{\partial z}  \\
+ \frac{\partial v_x}{\partial t} &=  b \frac{\partial p}{\partial x}  \\
+\frac{\partial p}{\partial t} &= k \left(\frac{\partial v_z}{\partial z} + \frac{\partial v_x}{\partial x} \right) + f(t)
+\end{split}
+\label{in1}
+\end{equation}
+To derive the second order expression, we need to apply the time derivative to both side of the third equation expressed in equation \ref{in1}, we can get
+\begin{equation}
+\begin{split}
+\frac{\partial^2 p}{\partial t^2} &= \frac{\partial}{\partial t}\left( k \left(\frac{\partial v_z}{\partial z} + \frac{\partial v_x}{\partial x} \right) \right) + \frac{\partial f(t)}{\partial t} \\
+&=  k \left(\frac{\partial}{\partial z}\frac{\partial v_z}{\partial t} + \frac{\partial}{\partial x}\frac{\partial v_x}{\partial t} \right)  + \frac{\partial f(t)}{\partial t} 
+\end{split}
+\label{in2}
+\end{equation}
+As the model parameter $k$ is independent of time variable $t$ and exchange the order of 
+partial derivative along time and spatial direction, next we are going to the expression in the first two equations of equation \ref{in1} to change the variable $\frac{\partial v_z}{\partial t}$ and  $\frac{\partial v_x}{\partial t}$, we can get
+\begin{equation}
+\frac{\partial^2 p}{\partial t^2} = k \left(  \frac{\partial}{\partial z} (b \frac{\partial p}{\partial z}) + \frac{\partial}{\partial x} (b \frac{\partial p}{\partial x})  \right) + \frac{\partial f(t)}{\partial t}
+\label{in3}
+\end{equation}
+we can move the first term in the right hand side of equation \ref{in3} to the left hand side, dived by $k$, we get
+\begin{equation}
+\frac{1}{k}\frac{\partial^2 p}{\partial t^2} -  \left(  \frac{\partial}{\partial z} (b \frac{\partial p}{\partial z}) + \frac{\partial}{\partial x} (b \frac{\partial p}{\partial x})  \right) = \frac{1}{k}\frac{\partial f(t)}{\partial t}
+\label{in4}
+\end{equation}
+The next step is to perform Fourier transform to frequency domain, we can get
+\begin{equation}
+\frac{-w^2}{k} p -  \left(  \frac{\partial}{\partial z} (b \frac{\partial p}{\partial z}) + \frac{\partial}{\partial x} (b \frac{\partial p}{\partial x})  \right) = \frac{iw f(w)}{k}
+\label{in5}
+\end{equation}
+
 \subsubsection{Mass averaging}
 \begin{equation}
 \begin{split}

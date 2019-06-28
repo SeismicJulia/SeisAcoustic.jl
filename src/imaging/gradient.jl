@@ -3,6 +3,18 @@
 """
 function get_residue(dsyn::Recordings, dobs::Recordings)
 
+    # check the size of recordings
+    if dsyn.nt != dobs.nt || dsyn.nr != dobs.nr
+       error("size of records doesn't match")
+    end
+
+    # check the receiver's location
+    for i = 1 : dsyn.nr
+        if dsyn.irz[i] != dobs.irz[i] || dsyn.irx[i] != dobs.irx[i]
+           error("the location of receiver doesn't match")
+        end
+    end
+
     # data format of recordings
     data_format = eltype(dsyn.p)
 

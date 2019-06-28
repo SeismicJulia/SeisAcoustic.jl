@@ -1,0 +1,16 @@
+\begin{figure}[htb]
+   \centering
+   \includegraphics[width=0.6\columnwidth]{Fig/f1.pdf}
+   \caption{Stagger grid}
+   \label{f1}
+\end{figure}
+\efloatseparator
+ 
+\begin{figure}[htb]
+   \centering
+   \includegraphics[width=0.6\columnwidth]{Fig/f2.pdf}
+   \caption{Rotated stagger grid}
+   \label{f2}
+\end{figure}
+\efloatseparator
+ 
