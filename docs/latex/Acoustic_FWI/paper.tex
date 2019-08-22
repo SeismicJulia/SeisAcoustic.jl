@@ -17,6 +17,7 @@
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{booktabs}
+\setcounter{MaxMatrixCols}{20}
 
 \setlength\parindent{0pt}
 
@@ -1236,15 +1237,17 @@ As we discussed in the equation \ref{eq28}, ${\bf M}_{pz}{\bf B}_{pz}$ and ${\bf
 \end{split}
 \label{eq75}
 \end{equation}
+The above equations are satisfied in the computation area. The adjoint pressure field at last time step  ${\tilde p}_z^{nt+\frac{1}{2}} = {\tilde p}_x^{nt+\frac{1}{2}}$ since the adjoint of sampling operator is to spray pressure recordings evenly to the two artificially splitted components. This equivalent to double the magnitude of recordings.
 So we can get the conclusion that for the adjoint wave field outside the PML absorbing boundary area that
 \begin{equation}
 \tilde{p}^{it+\frac{1}{2}}/2  = \tilde{p}_z^{it+\frac{1}{2}} = \tilde{p}_x^{it+\frac{1}{2}}
 \label{eq76}
 \end{equation}
+
 With this property, the equation \ref{eq71} can be further simplified as
 \begin{equation}
 \begin{split}
-\frac{\partial J}{{\partial \bf m}_l} &= \sum_{it=2}^{nt} \left( \frac{{\partial \bf M}_{pz}{\bf B}_{vz}}{\partial m_l} \cdot {\bf d}_v{\bf d}_z \cdot {\bf v}_z^{it} \right)^T \tilde{{\bf p}}_z^{it+\frac{1}{2}} +  \left( \frac{{\partial \bf M}_{px}{\bf B}_{vx}}{\partial m_l} \cdot {\bf d}_v{\bf d}_x \cdot {\bf v}_x^{it} \right)^T \tilde{{\bf p}}_x^{it+\frac{1}{2}} \\
+\frac{\partial J}{{\partial m}_l} &= \sum_{it=2}^{nt} \left( \frac{{\partial \bf M}_{pz}{\bf B}_{vz}}{\partial m_l} \cdot {\bf d}_v{\bf d}_z \cdot {\bf v}_z^{it} \right)^T \tilde{{\bf p}}_z^{it+\frac{1}{2}} +  \left( \frac{{\partial \bf M}_{px}{\bf B}_{vx}}{\partial m_l} \cdot {\bf d}_v{\bf d}_x \cdot {\bf v}_x^{it} \right)^T \tilde{{\bf p}}_x^{it+\frac{1}{2}} \\
 &= \sum_{it=2}^{nt} \left( \frac{{\partial \bf M}_{pz}{\bf B}_{vz}}{\partial m_l} \cdot {\bf d}_v{\bf d}_z \cdot {\bf v}_z^{it} +  \frac{{\partial \bf M}_{px}{\bf B}_{vx}}{\partial m_l} \cdot {\bf d}_v{\bf d}_x \cdot {\bf v}_x^{it} \right)^T \tilde{{\bf p}}_x^{it+\frac{1}{2}}  \\
 &=\sum_{it=2}^{nt} \left( 2\rho[l]\cdot v[l] \cdot dt \cdot \left( {\bf d}_v{\bf d}_z \cdot {\bf v}_z^{it}\right)[l] +  2\rho[l]\cdot v[l] \cdot dt \cdot \left( {\bf d}_v{\bf d}_x \cdot {\bf v}_x^{it} \right)[l] \right) \cdot \tilde{{\bf p}}_x^{it+\frac{1}{2}} [l]\\
 &=\sum_{it=2}^{nt} 2\rho[l]\cdot v[l] \cdot dt \cdot \left( {\bf d}_v{\bf d}_z \cdot {\bf v}_z^{it}+  {\bf d}_v{\bf d}_x \cdot {\bf v}_x^{it} \right)[l] \cdot \tilde{{\bf p}}_x^{it+\frac{1}{2}} [l] \\
@@ -1728,9 +1731,9 @@ Based on above formulations, we can create the Helmholtz operator as an sparse m
 \end{equation}
 where ${\bf H}$ is the Helmholtz operator and ${\bf m}$ is model parameter, ${\bf u}$ is the wave field at one frequency component and ${\bf f}$ is the source signature in the frequency domain. Follow the notations we used for time-domain finite difference method, the size of ${\bf H}$ is $N_z\cdot N_x \times N_z\cdot N_x$. The wave field at one frequency slice ${\bf u}$ is a vector length of $N_z \cdot N_x$, so as to the source signature ${\bf f}$.
 
-To simplify the derivations of gradient, we temporarily just consider one frequency slice. The synthetic data is obtained by sampling the wave field at the receiver's location, the sampling operator is indicated by operator ${\bf s}$. So the synthetic data is represented as 
+To simplify the derivations of gradient, we temporarily just consider one frequency slice. The synthetic data is obtained by sampling the wave field at the receiver's location, the sampling operator is indicated by operator ${\bf S}$. So the synthetic data is represented as 
 \begin{equation}
-{\bf d = su}
+{\bf d = Su}
 \label{eq126}
 \end{equation}
 In FWI, the model parameter is updated by minimizing the difference between the synthetic and observed data, here we just use the $l2$ norm as the metric to evaluate the difference, so the objective function is given as 
@@ -1749,7 +1752,7 @@ Base on the equation \ref{eq125}, \ref{eq126}, using the property of complex con
 \begin{equation}
 \begin{split}
 {\bf H}^*({\bf m}) \, {\bf u}^*({\bf m})& = {\bf f}^* \\
-{\bf d}^* &= {\bf s}^*{\bf u}^*
+{\bf d}^* &= {\bf S}^*{\bf u}^*
 \end{split}
 \label{eq129}
 \end{equation}
@@ -1779,36 +1782,195 @@ So we can get the expression of $\frac{\partial {\bf u}}{\partial m_l}$ and $\fr
 \end{equation}
 The next step we need to figure out the expression of $\frac{\partial J}{\partial {\bf u}}$ and $\frac{\partial J}{\partial {\bf u}^*}$. As equation \ref{eq127} can be also written as
 \begin{equation}
-J = \frac{1}{2}({\bf s}{\bf u} - {\bf d}_{obs})^T ({\bf s}{\bf u}^* - {\bf d}_{obs}^*)
+J = \frac{1}{2}({\bf S}{\bf u} - {\bf d}_{obs})^T ({\bf S}{\bf u}^* - {\bf d}_{obs}^*)
 \label{eq133}
 \end{equation}
 It is easy to derive that
 \begin{equation}
 \begin{split}
-\frac{\partial J}{\partial {\bf u}} & = \frac{1}{2} {\bf s}^T ({\bf d}^* - {\bf d}_{obs}^*) \\
-\frac{\partial J}{\partial {\bf u}^*} & = \frac{1}{2} {\bf s}^T ({\bf d} - {\bf d}_{obs}) \\
+\frac{\partial J}{\partial {\bf u}} & = \frac{1}{2} {\bf S}^T ({\bf d}^* - {\bf d}_{obs}^*) \\
+\frac{\partial J}{\partial {\bf u}^*} & = \frac{1}{2} {\bf S}^T ({\bf d} - {\bf d}_{obs}) \\
 \end{split}
 \label{eq134}
 \end{equation}
 We combine the result of equation \ref{eq128}, \ref{eq132} and \ref{eq134}, we can get
 \begin{equation}
 \begin{split}
-\frac{\partial J}{\partial m_l} &= -\frac{1}{2} \left(    \left({\bf H}^{-1} \,\frac{\partial {\bf H}}{\partial m_l} {\bf u}\right)^T {\bf s}^T ({\bf d}^* - {\bf d}_{obs}^*)  + \left( \left({\bf H}^*\right)^{-1}  \, \frac{\partial {\bf H}^*}{\partial m_l} {\bf u}^*\right)^T  {\bf s}^T ({\bf d} - {\bf d}_{obs})   \right) \\
- &= -\frac{1}{2} \left(    \left({\bf H}^{-1} \,\frac{\partial {\bf H}}{\partial m_l} {\bf u}\right)^T {\bf s}^T ({\bf d}^* - {\bf d}_{obs}^*)  + \left( \left({\bf H}^{-1}\right)^*  \, \frac{\partial {\bf H}^*}{\partial m_l} {\bf u}^*\right)^T  {\bf s}^T ({\bf d} - {\bf d}_{obs})   \right) \\
-  &= -\frac{1}{2} \left(    \left({\bf H}^{-1} \,\frac{\partial {\bf H}}{\partial m_l} {\bf u}\right)^T {\bf s}^T ({\bf d}^* - {\bf d}_{obs}^*)  + \left( \left( {\bf H}^{-1}  \, \frac{\partial {\bf H}}{\partial m_l} {\bf u} \right)^T \right)^* {\bf s}^T ({\bf d} - {\bf d}_{obs})   \right)
+\frac{\partial J}{\partial m_l} &= -\frac{1}{2} \left(    \left({\bf H}^{-1} \,\frac{\partial {\bf H}}{\partial m_l} {\bf u}\right)^T {\bf S}^T ({\bf d}^* - {\bf d}_{obs}^*)  + \left( \left({\bf H}^*\right)^{-1}  \, \frac{\partial {\bf H}^*}{\partial m_l} {\bf u}^*\right)^T  {\bf S}^T ({\bf d} - {\bf d}_{obs})   \right) \\
+ &= -\frac{1}{2} \left(    \left({\bf H}^{-1} \,\frac{\partial {\bf H}}{\partial m_l} {\bf u}\right)^T {\bf S}^T ({\bf d}^* - {\bf d}_{obs}^*)  + \left( \left({\bf H}^{-1}\right)^*  \, \frac{\partial {\bf H}^*}{\partial m_l} {\bf u}^*\right)^T  {\bf S}^T ({\bf d} - {\bf d}_{obs})   \right) \\
+  &= -\frac{1}{2} \left(    \left({\bf H}^{-1} \,\frac{\partial {\bf H}}{\partial m_l} {\bf u}\right)^T {\bf S}^T ({\bf d}^* - {\bf d}_{obs}^*)  + \left( \left( {\bf H}^{-1}  \, \frac{\partial {\bf H}}{\partial m_l} {\bf u} \right)^T \right)^* {\bf S}^T ({\bf d} - {\bf d}_{obs})   \right)
 \end{split}
 \label{eq135}
 \end{equation}
 It is not easily to find that the second term is the complex conjugate of the first term in the above equation. So the final form of the gradient can be simplified as
 \begin{equation}
 \begin{split}
-\frac{\partial J}{\partial m_l} &= -{\mathcal R} \left\{    \left({\bf H}^{-1} \,\frac{\partial {\bf H}}{\partial m_l} {\bf u}\right)^T {\bf s}^T ({\bf d}^* - {\bf d}_{obs}^*)  \right\} \\
-&= -{\mathcal R} \left\{  \left( \frac{\partial {\bf H}}{\partial m_l} {\bf u} \right)^T  ({\bf H}^T)^{-1} \,    {\bf s}^T ({\bf d}^* - {\bf d}_{obs}^*)  \right\} \\
+\frac{\partial J}{\partial m_l} &= -{\mathcal R} \left\{    \left({\bf H}^{-1} \,\frac{\partial {\bf H}}{\partial m_l} {\bf u}\right)^T {\bf S}^T ({\bf d}^* - {\bf d}_{obs}^*)  \right\} \\
+&= -{\mathcal R} \left\{  \left( \frac{\partial {\bf H}}{\partial m_l} {\bf u} \right)^T  ({\bf H}^T)^{-1} \,    {\bf S}^T ({\bf d}^* - {\bf d}_{obs}^*)  \right\} \\
 \end{split}
 \label{eq136}
 \end{equation}
-where ${\mathcal R}$ is the operator which take the real part of complex number. People usually call $\left( \frac{\partial {\bf H}}{\partial m_l} {\bf u} \right)$ as the source side wave field and $({\bf H}^T)^{-1} \,    {\bf s}^T ({\bf d}^* - {\bf d}_{obs}^*)$ as adjoint wave field, the gradient is obtained by the inner product between source-side wave field and adjoint wave field.
+where ${\mathcal R}$ is the operator which take the real part of complex number. People usually call $\left( \frac{\partial {\bf H}}{\partial m_l} {\bf u} \right)$ as the source side wave field and $({\bf H}^T)^{-1} \,    {\bf S}^T ({\bf d}^* - {\bf d}_{obs}^*)$ as adjoint wave field, the gradient is obtained by the inner product between source-side wave field and adjoint wave field.
+
+We considering the details of $\frac{\partial {\bf H}}{\partial m_l}$, we temporarily only consider the velocity as the model parameter and consider density as constant (not updated by inversion). To simplify the derivation, we assume the model size (include PML) is $3 \times 4$.
+The mapping between sub-index and linear index are expressed as follow
+\begin{equation}
+\begin{pmatrix}
+[1,1] \rightarrow 1 & [1,2] \rightarrow 4 & [1,3]\rightarrow 7 & [1,4]\rightarrow 10 \\
+[2,1]\rightarrow 2 & [2,2]\rightarrow 5   & [2,3]\rightarrow 8 & [2,4]\rightarrow 11 \\
+[3,1]\rightarrow 3 & [3,2] \rightarrow 6  & [3,3]\rightarrow 9 & [3,4]\rightarrow 12 \\
+\end{pmatrix}
+\end{equation}
+We only consider the velocity part and define $c_1 = -c\, \omega^2$, $c_2 = - d\,\omega^2$, $c_3 = - \frac{1-c-4d}{4}\,\omega^2$
+ So the part of the Hessian matrix only related to velocity model can be expressed as
+\begin{equation}
+\begin{pmatrix}
+\frac{c_1}{k_1} & \frac{c_2}{k_2} & \quad & \frac{c_2}{k_4} & \frac{c_3}{k_5} & \quad & \quad & \quad & \quad & \quad & \quad & \quad \\
+
+\frac{c_2}{k_1} & \frac{c_1}{k_2} & \frac{c_2}{k_3} & \frac{c_3}{k_4} & \frac{c_2}{k_5} & \frac{c_3}{k_6}  & \quad & \quad & \quad & \quad & \quad & \quad \\
+
+\quad & \frac{c_2}{k_2} & \frac{c_1}{k_3} & \quad & \frac{c_3}{k_5} & \frac{c_2}{k_6}  & \quad & \quad & \quad & \quad & \quad & \quad \\\\
+
+\frac{c_2}{k_1} & \frac{c_3}{k_2}  & \quad & \frac{c_1}{k_4}  & \frac{c_2}{k_5} & \quad   & \frac{c_2}{k_7} & \frac{c_3}{k_8} & \quad & \quad & \quad & \quad \\
+
+\frac{c_3}{k_1} & \frac{c_2}{k_2} & \frac{c_3}{k_3} & \frac{c_2}{k_4} & \frac{c_1}{k_5} & \frac{c_2}{k_6} & \frac{c_3}{k_7} & \frac{c_2}{k_8} & \frac{c_3}{k_9} & \quad & \quad & \quad \\
+
+\quad & \frac{c_3}{k_2} & \frac{c_2}{k_3} &  \quad & \frac{c_2}{k_5} & \frac{c_1}{k_6} &  \quad & \frac{c_3}{k_8} & \frac{c_2}{k_9} &  \quad &  \quad &  \quad \\\\
+
+\quad & \quad &\quad & \frac{c_2}{k_4]} & \frac{c_3}{k_5} & \quad & \frac{c_1}{k_7} & \frac{c_2}{k_8} & \quad & \frac{c_2}{k_{10}} & \frac{c_3}{k_{11}} & \quad \\
+
+\quad  & \quad  & \quad & \frac{c_3}{k_4} & \frac{c_2}{k_5} & \frac{c_3}{k_6} & \frac{c_2}{k_7}  & \frac{c_1}{k_8} & \frac{c_2}{k_9}  & \frac{c_3}{k_{10}} & \frac{c_2}{k_{11}} & \frac{c_3}{k_{12}} \\
+
+\quad &  \quad &  \quad &  \quad & \frac{c_3}{k_5} & \frac{c_2}{k_6} &  \quad & \frac{c_2}{k_8} & \frac{c_1}{k_9} &  \quad & \frac{c_3}{k_{11}} & \frac{c_2}{k_{12}} \\\\
+
+\quad &  \quad &  \quad & \quad & \quad & \quad & \frac{c_2}{k_7} & \frac{c_3}{k_8} & \quad & \frac{c_1}{k_{10}} & \frac{c_2}{k_{11}} & \quad \\
  
+\quad &  \quad &  \quad & \quad & \quad & \quad & \frac{c_3}{k_7} & \frac{c_2}{k_8} & \frac{c3}{k_9} & \frac{c_2}{k_{10}} & \frac{c_1}{k_{11}} & \frac{c_2}{k_{12}} \\
+
+\quad &  \quad &  \quad & \quad & \quad & \quad & \quad & \frac{c_3}{k[_8} & \frac{c_2}{k_9} & \quad & \frac{c_2}{k_{11}} & \frac{c_1}{k_{12}} 
+\end{pmatrix}
+\end{equation}
+We know $k = \rho \times v^2$, so $\frac{\partial \frac{c_i}{k}}{\partial\, v} = -\frac{2\, c_i \rho v}{k^2} =  -\frac{2\, c_i}{\rho v^3}$
+Suppose we want to compute $\frac{\partial {\bf H}}{\partial v_5}$ is given as
+\begin{equation}
+\begin{pmatrix}
+0 & 0 & 0 & 0 & -\frac{2\, c_3}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_2}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_3}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_2}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_1}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_2}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_3}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_2}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_3}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+\end{pmatrix}
+\end{equation}
+So the result of $\left( \frac{\partial {\bf H}}{\partial v_5} {\bf u} \right)$ is given as
+\begin{equation}
+\begin{pmatrix}
+0 & 0 & 0 & 0 & -\frac{2\, c_3}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_2}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_3}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_2}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_1}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_2}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_3}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_2}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & -\frac{2\, c_3}{\rho_5 v_5^3} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+\end{pmatrix}
+\begin{bmatrix}
+u_1\\
+u_2\\
+u_3\\
+u_4\\
+u_5\\
+u_6\\
+u_7\\
+u_8\\
+u_9\\
+u_{10}\\
+u_{11}\\
+u_{12}\\
+\end{bmatrix}
+=
+\begin{bmatrix}
+-\frac{2\, c_3\, u_5}{\rho_5 v_5^3} \\
+-\frac{2\, c_2\, u_5}{\rho_5 v_5^3} \\
+-\frac{2\, c_3\, u_5}{\rho_5 v_5^3} \\
+-\frac{2\, c_2\, u_5}{\rho_5 v_5^3} \\
+-\frac{2\, c_1\, u_5}{\rho_5 v_5^3} \\
+-\frac{2\, c_2\, u_5}{\rho_5 v_5^3}  \\
+-\frac{2\, c_3\, u_5}{\rho_5 v_5^3} \\
+-\frac{2\, c_2\, u_5}{\rho_5 v_5^3}  \\
+-\frac{2\, c_3\, u_5}{\rho_5 v_5^3} \\
+0 \\
+0 \\
+0 \\
+\end{bmatrix}
+=
+-\frac{2\, u_5}{\rho_5 \,v_5^3}
+\begin{bmatrix}
+c_3 \\
+c_2 \\
+c_3 \\
+c_2 \\
+c_1 \\
+c_2 \\
+c_3 \\
+c_2 \\
+c_3 \\
+0 \\
+0 \\
+0 \\
+\end{bmatrix}
+\end{equation}
+We also name the adjoint wave field is given as
+\begin{equation}
+{\bf u}_{adj} = ({\bf H}^T)^{-1} \,    {\bf S}^T ({\bf d}^* - {\bf d}_{obs}^*)
+\end{equation}
+The final formulation of the gradient of $v_5$ is given as
+\begin{equation}
+\begin{split}
+g_5 &= \left( \frac{\partial {\bf H}}{\partial v_5} {\bf u} \right)^T \tilde{\bf u} \\
+       &= -\frac{2\, u_5}{\rho_5 \,v_5^3} \begin{bmatrix}
+       c_3 &
+c_2 &
+c_3 &
+c_2 &
+c_1 &
+c_2 &
+c_3 &
+c_2 &
+c_3 &
+0 &
+0 &
+0 
+\end{bmatrix}
+\begin{bmatrix}
+\tilde{u}_1 \\
+\tilde{u}_2 \\
+\tilde{u}_3 \\
+\tilde{u}_4 \\
+\tilde{u}_5 \\
+\tilde{u}_6 \\
+\tilde{u}_7 \\
+\tilde{u}_8 \\
+\tilde{u}_9 \\
+0 \\
+0 \\
+0 \\
+\end{bmatrix}
+\end{split}
+\end{equation}
+
+
+
 %\bibliographystyle{seg}
 %\bibliography{paper}
 

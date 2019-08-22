@@ -8,8 +8,10 @@ export FdParams,
        MonochromaticRecordings,
        sample_spt2rec!,
        inject_rec2spt!,
-       get_residue
+       get_residue,
+       velocity_gradient
 
 include("helmholtz.jl")
 include("spectra.jl")
 include("recordings.jl")
+include("gradient.jl")
