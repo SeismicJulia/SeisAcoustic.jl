@@ -99,7 +99,6 @@ tmp2 = (dot(spt2_f.vz, spt2_b.vz) + dot(spt2_f.vx, spt2_b.vx)
 
 (tmp1-tmp2) / tmp1
 
-
 # test multi-step adjoint operator
 # forward modelling
 irx = collect(1:2:params.nx); irz = 2 * ones(length(irx));
@@ -156,3 +155,54 @@ SeisPlotTX(d[:,:,3,it], wbox=9, hbox=3, cmap="gray")
 SeisPlotTX(d[:,:,4,it], wbox=9, hbox=3, cmap="gray")
 SeisPlotTX(d[:,:,3,it]-d[:,:,4,it], wbox=9, hbox=3, cmap="gray")
 norm(d[zl:zu,xl:xu,3,:] - d[zl:zu,xl:xu,4,:])
+
+
+# # # ==============================================================================
+# # #    test efficiency
+# spt1_f = Snapshot(params);
+# spt2_f = Snapshot(params);
+# spt1_b = Snapshot(params);
+# spt2_b = Snapshot(params);
+#
+# # initialize spt1_f with random number
+# for ix = 1 : params.Nx
+#     amp = 1.0
+#     col_idx = (ix-1) * params.Nz
+#
+#     for iz = 1 : params.Nz
+#         idx= col_idx + iz
+#         spt1_f.vz[idx] = amp * randn(); spt1_b.vz[idx] = spt1_f.vz[idx]
+#         spt1_f.vx[idx] = amp * randn(); spt1_b.vx[idx] = spt1_f.vx[idx]
+#         spt1_f.pz[idx] = amp * randn(); spt1_b.pz[idx] = spt1_f.pz[idx]
+#         spt1_f.px[idx] = amp * randn(); spt1_b.px[idx] = spt1_f.px[idx]
+#     end
+# end
+#
+# # temporary variables
+# tmp_z1 = zeros(params.data_format, params.Nz);
+# tmp_z2 = zeros(params.data_format, params.Nz);
+# tmp_x1 = zeros(params.data_format, params.Nx);
+# tmp_x2 = zeros(params.data_format, params.Nx);
+#
+# # nt-step forward
+# function foo(nt, spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+#
+#     for it = 1 : nt
+#         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+#         copy_snapshot!(spt1, spt2);
+#     end
+#     return nothing
+# end
+#
+# function boo(nt, spt2, spt1, params, tmp, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+#
+#     for it = 1 : nt
+#         one_step_forward_new!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+#         copy_snapshot!(spt1, spt2);
+#     end
+#     return nothing
+# end
+#
+# nt = 1000
+# @time foo(nt, spt2_f, spt1_f, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2);
+# @time boo(nt, spt2_b, spt1_b, params, tmp, tmp_z1, tmp_z2, tmp_x1, tmp_x2);

@@ -26,31 +26,49 @@ dt = 0.001; tmax = 2.0;
 params = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
          data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
 
-# initialize a source
-src = Source(2, 150, params; ot=0.0, fdom=20.0,
+# initialize a single source
+src = Source(27, 49, params; ot=0.0, fdom=20.0,
       type_flag="ricker", amp=100000, location_flag="index");
+
+
+srcs = get_multi_sources([27], [49], params; amp=100000, ot=[0.0], fdom=20.0);
+
+# initialize multi-sources
+# isx = collect(5:60:295); ns=length(isx); isz = 2*ones(ns);
+# ot  = 0.5*rand(ns);
+# srcs = get_multi_sources(isz, isx, params; amp=100000, ot=ot, fdom=15);
 
 # initialize recordings
 irx = collect(1:2:params.nx);
 irz = 2 * ones(length(irx));
 rec = Recordings(irz, irx, params);
 
+multi_step_forward!(rec, src, params)
+SeisPlotTX(rec.p)
+
 # generate recordings and boundary value
 path_bnd = joinpath(homedir(), "Desktop/bnd.rsb");
 path_wfd = joinpath(homedir(), "Desktop/wfd.rsb");
+
+# multi_step_forward!(rec, src, params; path_bnd=path_bnd, path_wfd=path_wfd)
 multi_step_forward!(rec, src, params; path_bnd=path_bnd, path_wfd=path_wfd)
 SeisPlotTX(rec.p)
 
 # compute source-side wavefield
 pre1 = get_sourceside_wavefield(src, params; iflag=1);
 pre2 = get_sourceside_wavefield(src, params; iflag=2);
+pre3 = sourceside_reconstruct_forward(path_bnd, src, params);
+pre4 = sourceside_reconstruct_backward(path_bnd, path_wfd, src, params);
 
 # check the consistent of the value
-norm(pre1 - pre2) / norm(pre1);
+norm(pre1 - pre2) / norm(pre1)
+norm(pre2 - pre3) / norm(pre2)
+norm(pre2 - pre4) / norm(pre2)
 
 it = 399
 SeisPlotTX(pre1[:,:,it], cmap="seismic", wbox=9, hbox=3)
 SeisPlotTX(pre2[:,:,it], cmap="seismic", wbox=9, hbox=3)
+SeisPlotTX(pre3[:,:,it], cmap="seismic", wbox=9, hbox=3)
 
 # ==============================================================================
 #            check the analytical gradient against numerical gradient

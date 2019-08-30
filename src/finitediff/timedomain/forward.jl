@@ -13,6 +13,7 @@ function vertical_partial_derivative!(r::Vector{Tv}, p::Vector{Tv}, dpdz::Sparse
         # main part
         if iflag == 1
            A_mul_b!(tmp2, dpdz, tmp1)
+
         elseif iflag == 2
            At_mul_b!(tmp2, dpdz, tmp1)
         end
@@ -33,21 +34,32 @@ end
 function horizontal_partial_derivative!(r::Vector{Tv}, p::Vector{Tv}, dpdx::SparseMatrixCSC{Tv,Ti},
          nz::Ti, nx::Ti, tmp1::Vector{Tv}, tmp2::Vector{Tv}; iflag=1) where {Ti<:Int64, Tv<:AbstractFloat}
 
+    # the address of vector p and r
+    sp = pointer(p)
+    sr = pointer(r)
+
+    # electronic size
+    esize = sizeof(Tv)
+    shift = 0
+
     for iz = 1 : nz
 
         # extract one row
-        BLAS.blascopy!(nx, pointer(p)+sizeof(Tv)*(iz-1), nz, tmp1, 1)
+        BLAS.blascopy!(nx, sp+shift, nz, tmp1, 1)
 
         # main part
         if iflag == 1
            A_mul_b!(tmp2, dpdx, tmp1)
+
         elseif iflag == 2
            At_mul_b!(tmp2, dpdx, tmp1)
         end
 
         # save the result
-        BLAS.blascopy!(nx, tmp2, 1, pointer(r)+sizeof(Tv)*(iz-1), nz)
+        BLAS.blascopy!(nx, tmp2, 1, sr+shift, nz)
 
+        # prepare for next row
+        shift = shift + esize
     end
 
     return nothing
@@ -64,13 +76,17 @@ function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::TdPar
         ilower = (ix-1) * params.Nz + 1
         iupper = ilower + params.Nz - 1
 
+        # copy one column
         idx    = 0
         for iz = ilower : iupper
             idx= idx + 1
             tmp_z1[idx] = spt1.pz[iz] + spt1.px[iz]  # p1 = pz1 + px1
         end
 
+        # partial derivative in Z direction
         A_mul_b!(tmp_z2, params.dpdz, tmp_z1)        # dpdz
+
+        # update one column
         idx    = 0
         for iz = ilower : iupper
             idx = idx + 1
@@ -87,7 +103,7 @@ function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::TdPar
             idx= idx + params.Nz
         end
 
-        A_mul_b!(tmp_x2, params.dpdx, tmp_x1)         # dpdx
+        A_mul_b!(tmp_x2, params.dpdx, tmp_x1)        # dpdx
 
         idx = iz
         for ix = 1 : params.Nx
@@ -144,7 +160,7 @@ save_type="wavefield": vz, vx, pz+px  without PML part,
 save_type="pressure" : p=pz+px without PML bounary part.
 """
 function multi_step_forward!(path::String, src::Source, params::TdParams;
-                            save_flag="pressure")
+                             save_flag="pressure")
 
     # initialize some variables
     spt1 = Snapshot(params)
@@ -174,24 +190,33 @@ function multi_step_forward!(path::String, src::Source, params::TdParams;
        hdr = pressure_header(params)
        fid = write_RSheader(path, hdr)
        append_one_pressure(fid, spt1, params)
+
     else
        error("save_type only support snapshot, wavefield or pressure")
+
     end
 
-    # loop over time-stepping
+    # applying time stepping nt-1 times
     for it = 2 : params.nt
 
+        # one step forward
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         add_source!(spt2, src, it)
+
+        # write current wavefield to disk
+        if save_flag == "snapshot"
+           append_one_snapshot(fid, spt2)
+
+        elseif save_flag == "wavefield"
+           append_one_wavefield(fid, spt2, params)
+
+        elseif save_flag == "pressure"
+           append_one_pressure(fid, spt2, params)
+        end
+
+        # prepare for next time stepping
         copy_snapshot!(spt1, spt2)
 
-        if save_flag == "snapshot"
-           append_one_snapshot(fid, spt1)
-        elseif save_flag == "wavefield"
-           append_one_wavefield(fid, spt1, params)
-        elseif save_flag == "pressure"
-           append_one_pressure(fid, spt1, params)
-        end
     end
 
     close(fid)
@@ -235,24 +260,30 @@ function multi_step_forward!(path::String, srcs::Vector{Source}, params::TdParam
        hdr = pressure_header(params)
        fid = write_RSheader(path, hdr)
        append_one_pressure(fid, spt1, params)
+
     else
        error("save_type only support snapshot, wavefield or pressure")
     end
 
-    # loop over time-stepping
+    # applying time stepping nt-1 times
     for it = 2 : params.nt
 
+        # one step forward
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         add_multi_sources!(spt2, srcs, it)
-        copy_snapshot!(spt1, spt2)
 
         if save_flag == "snapshot"
-           append_one_snapshot(fid, spt1)
+           append_one_snapshot(fid, spt2)
+
         elseif save_flag == "wavefield"
-           append_one_wavefield(fid, spt1, params)
+           append_one_wavefield(fid, spt2, params)
+
         elseif save_flag == "pressure"
-           append_one_pressure(fid, spt1, params)
+           append_one_pressure(fid, spt2, params)
         end
+
+        # prepare for next time stepping
+        copy_snapshot!(spt1, spt2)
     end
 
     close(fid)
@@ -290,8 +321,11 @@ function multi_step_forward!(rec::Recordings, src::Source, params::TdParams;
     # loop over time stepping
     for it = 2 : params.nt
 
+        # one time stepping
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         add_source!(spt2, src, it)
+
+        # sampling snapshot to get recordings
         sample_spt2rec!(rec, spt2, it)
 
         # save boundary of wavefield
@@ -338,7 +372,6 @@ function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::TdPa
     # obtain the first time sample of recordings
     sample_spt2rec!(rec, spt1, 1)
 
-
     # save the boundary of the first wavefield
     if path_bnd != "NULL"
        hdr = boundary_header(params)
@@ -349,9 +382,12 @@ function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::TdPa
     # loop over time stepping
     for it = 2 : params.nt
 
+        # one time step
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         add_multi_sources!(spt2, srcs, it)
-        sample_spt2rec!(rec, spt1, it)
+
+        # sample the snapshot to get recordings
+        sample_spt2rec!(rec, spt2, it)
 
         # save boundary of wavefield
         if path_bnd != "NULL"
@@ -523,7 +559,8 @@ function pressure_reconstruct_forward(path_bnd::Ts, src::Source,
         # add source to wavefield
         if (params.order+1 <= src.isz <= params.nz-params.order &&
             params.order+1 <= src.isx <= params.nx-params.order)
-           add_source!(wfd2, src, it)
+
+            add_source!(wfd2, src, it)
         end
 
         # save the pressure field
@@ -604,6 +641,189 @@ function pressure_reconstruct_forward(path_bnd::Ts, srcs::Vector{Source},
     close(fid_bnd)
     return reshape(pre, params.nz, params.nx, params.nt)
 end
+
+"""
+   reconstruct source-side wavefield forwardly, the output can be used for born
+approximation
+"""
+function sourceside_reconstruct_forward(path_bnd::Ts, src::Source,
+         params::TdParams) where {Ts <: String}
+
+    # length of one-step pressure field
+    N = params.nz * params.nx
+
+    # initialize intermediate variables
+    wfd1 = Wavefield(params)
+    wfd2 = Wavefield(params)
+    tmp_z1 = zeros(params.data_format, params.nz)
+    tmp_z2 = zeros(params.data_format, params.nz)
+    tmp_x1 = zeros(params.data_format, params.nx)
+    tmp_x2 = zeros(params.data_format, params.nx)
+
+    # save the sourceside wavefield at one time step
+    dpdt   = zeros(params.data_format, N)
+
+    # initialize boundary value
+    fid_bnd = open(path_bnd, "r")
+    bnd = WavefieldBound(params)
+
+    # allocate memory for saving pressure field
+    pre = zeros(params.data_format, N * (params.nt-1))
+
+    # add source to the first wavefield
+    add_source!(wfd1, src, 1)
+
+    # the start index for saving the current source-side wavefield
+    idx_o = 1
+
+    # loop over time stepping
+    for it = 2 : params.nt
+
+        # read the boundary value
+        read_one_boundary!(bnd, fid_bnd, it, params)
+
+        # forward time steping and correcting boundaries
+        one_step_forward!(wfd2, wfd1, bnd, params,
+                          tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+
+        # subtract the source term if source located in the saved boundary area
+        if (src.isz <= params.order || src.isz > params.nz-params.order ||
+            src.isx <= params.order || src.isx > params.nx-params.order)
+
+           subtract_source!(wfd2, src, it)
+        end
+
+        # compute the source-side wave field
+        for i = 1 : N
+            dpdt[i] = 2.0 * (wfd2.p[i] - wfd1.p[i]) / params.vel[i]
+        end
+
+        # save the source-side field
+        copyto!(pre, idx_o, dpdt, 1, N)
+        idx_o = idx_o + N
+
+        # add source to wavefield and prepare for next time step
+        add_source!(wfd2, src, it)
+
+        # prepare for next step
+        copy_wavefield!(wfd1, wfd2)
+    end
+
+    close(fid_bnd)
+    return reshape(pre, params.nz, params.nx, params.nt-1)
+
+end
+
+function sourceside_reconstruct_forward(path_bnd::Ts, srcs::Vector{Source},
+         params::TdParams) where {Ts <: String}
+
+    # length of one-step pressure field
+    N = params.nz * params.nx
+
+    # number of sources
+    ns = length(srcs)
+
+    # initialize intermediate variables
+    wfd1 = Wavefield(params)
+    wfd2 = Wavefield(params)
+    tmp_z1 = zeros(params.data_format, params.nz)
+    tmp_z2 = zeros(params.data_format, params.nz)
+    tmp_x1 = zeros(params.data_format, params.nx)
+    tmp_x2 = zeros(params.data_format, params.nx)
+
+    # save the sourceside wavefield at one time step
+    dpdt   = zeros(params.data_format, N)
+
+    # initialize boundary value
+    fid_bnd = open(path_bnd, "r")
+    bnd = WavefieldBound(params)
+
+    # allocate memory for saving pressure field
+    pre = zeros(params.data_format, N * (params.nt-1))
+
+    # add source to the first wavefield
+    add_multi_sources!(wfd1, srcs, 1)
+
+    # the start index for saving the current source-side wavefield
+    idx_o = 1
+
+    # loop over time stepping
+    for it = 2 : params.nt
+
+        # read the boundary value
+        read_one_boundary!(bnd, fid_bnd, it, params)
+
+        # forward time steping and correcting boundaries
+        one_step_forward!(wfd2, wfd1, bnd, params,
+                          tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+
+        # subtract the source term if source located in the saved boundary area
+        for i = 1 : ns
+
+            if (srcs[i].isz <= params.order || srcs[i].isz > params.nz-params.order ||
+                srcs[i].isx <= params.order || srcs[i].isx > params.nx-params.order)
+
+                subtract_source!(wfd2, srcs[i], it)
+            end
+        end
+
+        # compute the source-side wave field
+        for i = 1 : N
+            dpdt[i] = 2.0 * (wfd2.p[i] - wfd1.p[i]) / params.vel[i]
+        end
+
+        # save the source-side field
+        copyto!(pre, idx_o, dpdt, 1, N)
+        idx_o = idx_o + N
+
+        # add source to wavefield and prepare for next time step
+        add_multi_sources!(wfd2, srcs, it)
+
+        # prepare for next step
+        copy_wavefield!(wfd1, wfd2)
+    end
+
+    close(fid_bnd)
+    return reshape(pre, params.nz, params.nx, params.nt-1)
+
+end
+
+
+# this version of one step forward is little bit slower than the used one
+# since the overhead of calling an function
+# function one_step_forward_new!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::TdParams{Ti,Tv},
+#                                tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
+#                                tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}
+#
+#     # compute pressure field
+#     spt2.pz .= spt1.pz .+ spt1.px
+#
+#     # update particle velocity
+#     vertical_partial_derivative!(spt2.vz, spt2.pz, params.dpdz, params.Nz, params.Nx, tmp_z1, tmp_z2; iflag=1)
+#     horizontal_partial_derivative!(spt2.vx, spt2.pz, params.dpdx, params.Nz, params.Nx, tmp_x1, tmp_x2; iflag=1)
+#     idx = 0
+#     for ix = 1 : params.Nx
+#         for iz = 1 : params.Nz
+#             idx= idx + 1
+#             spt2.vz[idx] = params.MvzBvz[iz]*spt1.vz[idx] + params.MvzBp[idx]*spt2.vz[idx]
+#             spt2.vx[idx] = params.MvxBvx[ix]*spt1.vx[idx] + params.MvxBp[idx]*spt2.vx[idx]
+#         end
+#     end
+#
+#     # update pressure field
+#     vertical_partial_derivative!(spt2.pz, spt2.vz, params.dvdz, params.Nz, params.Nx, tmp_z1, tmp_z2; iflag=1)
+#     horizontal_partial_derivative!(spt2.px, spt2.vx, params.dvdx, params.Nz, params.Nx, tmp_x1, tmp_x2; iflag=1)
+#     idx = 0
+#     for ix = 1 : params.Nx
+#         for iz = 1 : params.Nz
+#             idx= idx + 1
+#             spt2.pz[idx] = params.MpzBpz[iz]*spt1.pz[idx] + params.MpzBvz[idx]*spt2.pz[idx]
+#             spt2.px[idx] = params.MpxBpx[ix]*spt1.px[idx] + params.MpxBvx[idx]*spt2.px[idx]
+#         end
+#     end
+#
+#     return nothing
+# end
 
 # function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield,
 #          bnd::WavefieldBound, params::TdParams,

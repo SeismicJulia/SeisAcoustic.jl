@@ -122,3 +122,12 @@ path = joinpath(homedir(), "Desktop/KLSRTM_data/homogeneous/Hessian.bin");
 n=1000;
 tmp = "/Users/wenlei/Desktop/H.bin"; tmpfid = open(tmp,"w"); write(tmpfid, convert(Vector{Float32}, vec(H[1:n,1:n]))); close(tmpfid);
 psimage < /Users/wenlei/Desktop/H.bin xbox=0.5 ybox=0.5 height=5.5 width=5.5 labelsize=12 n1=1000 d1=1 d1num=200 f1num=200 n2=1000 d2=1 d2num=200 f2num=200 perc=96 > /Users/wenlei/Desktop/Hessian.eps
+
+
+
+# test call the seismic unix command via julia
+vel = rand(101, 181);
+tmp = "/Users/wenlei/Desktop/vel.bin"; tmpfid = open(tmp, "w"); write(tmpfid, convert(Vector{Float32}, vec(vel))); close(tmpfid);
+cmd = `psimage '<' /Users/wenlei/Desktop/vel.bin height=3 width=6 labelsize=12 n1=101 d1=0.01 d1num=0.2 f1num=0.2 label1="Z (km)" n2=181 d2=0.01 d2num=0.4 f2num=0.4 label2="X (km)" legend=1 lstyle=horibottom units="m/s" lbeg=1400 ldnum=200 wrgb=1.0,0,0 grgb=1.0,1.0,1.0 brgb=0,0,1.0 '>' /Users/wenlei/Desktop/vel0.eps`
+
+run(cmd)
