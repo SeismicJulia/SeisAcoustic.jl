@@ -626,6 +626,7 @@ function pressure_reconstruct_forward(path_bnd::Ts, srcs::Vector{Source},
         for i = 1 : ns
             if (params.order+1 <= srcs[i].isz <= params.nz-params.order &&
                 params.order+1 <= srcs[i].isx <= params.nx-params.order)
+
                add_source!(wfd2, srcs[i], it)
             end
         end
