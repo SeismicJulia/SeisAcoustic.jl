@@ -72,13 +72,11 @@ export get_gamma_profile,
        one_step_forward!,
        multi_step_forward!,
        pressure_reconstruct_forward,
-       sourceside_reconstruct_forward,
 # ============= adjoint time stepping =============
        one_step_adjoint!,
        multi_step_adjoint!,
        one_step_backward!,
-       pressure_reconstruct_backward,
-       sourceside_reconstruct_backward
+       pressure_reconstruct_backward
 
 include("pml.jl")
 include("fdstencil.jl")

@@ -52,8 +52,8 @@ irz = 2 * ones(length(irx));
 dobs= Recordings(irz, irx, params);
 
 # generate recordings and boundary value
-multi_step_forward!(dobs, src, params)
-SeisPlotTX(dobs.p, cmap="seismic", pclip=98,
+@time multi_step_forward!(dobs, src, params);
+SeisPlotTX(dobs.p, cmap="gray", pclip=98,
            xlabel="Traces", ylabel="Time (s)", dy=0.001)
 
 # ==============================================================================
@@ -68,13 +68,27 @@ path_bnd = joinpath(homedir(), "Desktop/bnd.rsb");
 path_wfd = joinpath(homedir(), "Desktop/wfd.rsb");
 dsyn = Recordings(irz, irx, params0);
 
-multi_step_forward!(dsyn, src, params0, path_bnd=path_bnd, path_wfd=path_wfd);
-SeisPlotTX(dsyn.p, cmap="seismic", pclip=98,
+# the source-side wavefield is generated simultanes source
+isx = collect(5:10:295); ns=length(isx);
+isz = 2   * ones(ns);
+ot  = 0.5 * rand(ns);
+pol = rand(Bool, ns);
+amp = 100000 * ones(ns);
+for i = 1 : ns
+    if !pol[i]
+       amp[i] = - amp[i]
+    end
+end
+srcs = get_multi_sources(isz, isx, params; amp=amp, ot=ot, fdom=5);
+
+# born approximation forward
+multi_step_forward!(dsyn, srcs, params0, path_bnd=path_bnd, path_wfd=path_wfd);
+SeisPlotTX(dsyn.p, cmap="gray", pclip=98,
            xlabel="Traces", ylabel="Time (s)", dy=0.001)
 
 # compute the residue
 dres = get_residue(dsyn, dobs);
-SeisPlotTX(dres.p, cmap="seismic", pclip=98,
+SeisPlotTX(dres.p, cmap="gray", pclip=98,
            xlabel="Traces", ylabel="Time (s)", dy=0.001)
 
 # set the scatter
@@ -85,9 +99,11 @@ SeisPlotTX(dres.p, cmap="seismic", pclip=98,
 # born approximation forward
 m1 = 10000. * randn(params.nz * params.nx);
 rec1 = Recordings(irz, irx, params0);
-born_approximation_forward!(rec1, m1, path_bnd, src, params0);
+@time born_approximation_forward!(rec1, m1, path_bnd, srcs, params0);
+SeisPlotTX(rec1.p, cmap="gray", pclip=98,
+           xlabel="Traces", ylabel="Time (s)", dy=0.001)
 
-# born approximation adjoint
+# make band-limited random recordings
 w    = ricker(15.0, params.dt)
 hl   = floor(Int64, length(w)/2)
 rec2 = Recordings(irz, irx, params);
@@ -97,14 +113,22 @@ for i = 1 : rec2.nr
     copyto!(rec2.p, idx_o[1], tmp, hl+1, params0.nt)
     idx_o[1] = idx_o[1] + params0.nt
 end
-m2 = velocity_gradient(rec2, path_bnd, path_wfd, src, params0);
+SeisPlotTX(rec2.p, cmap="gray", pclip=98,
+           xlabel="Traces", ylabel="Time (s)", dy=0.001)
 
+# born approximation adjoint
+m2 = born_approximation_adjoint(rec2, path_bnd, path_wfd, srcs, params0);
+
+# dot product test
 tmp1 = dot(m1, m2)
 
 p1 = rec1.p[2:end,:];
 p2 = rec2.p[2:end,:];
 tmp2 = dot(vec(p1), vec(p2))
+
 (tmp1-tmp2) / tmp1
+
+
 # examine the result
 # i = 50
 # p1 = dres.p[:,i] / maximum(abs.(dres.p[:,i]))
