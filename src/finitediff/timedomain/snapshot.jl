@@ -68,7 +68,7 @@ function sample_adjoint2pre!(p::Vector{Tv}, spt::Snapshot,
     i = 0
     for j in params.spt2wfd
         i = i + 1
-        p[i] = spt.pz[j] # pz = px = p/2 inside the modeling area
+        p[i] = spt.px[j] # pz = px = p/2 inside the modeling area
     end
     return nothing
 end

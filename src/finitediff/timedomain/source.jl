@@ -1,3 +1,8 @@
+# """
+#    abstract type Source has two subtype: SingleSource and SimultaneousSource
+# """
+# abstract type Source end
+
 """
    struct for explosive source
 """

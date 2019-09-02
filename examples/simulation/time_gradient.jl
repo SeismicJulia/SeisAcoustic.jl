@@ -27,16 +27,13 @@ params = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
          data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
 
 # initialize a single source
-src = Source(27, 49, params; ot=0.0, fdom=20.0,
-      type_flag="ricker", amp=100000, location_flag="index");
-
-
-srcs = get_multi_sources([27], [49], params; amp=100000, ot=[0.0], fdom=20.0);
+# src = Source(27, 49, params; ot=0.0, fdom=20.0,
+#       type_flag="ricker", amp=100000, location_flag="index");
 
 # initialize multi-sources
-# isx = collect(5:60:295); ns=length(isx); isz = 2*ones(ns);
-# ot  = 0.5*rand(ns);
-# srcs = get_multi_sources(isz, isx, params; amp=100000, ot=ot, fdom=15);
+isx = collect(5:60:295); ns=length(isx); isz = 2*ones(ns);
+ot  = 0.5*rand(ns);
+srcs = get_multi_sources(isz, isx, params; amp=100000, ot=ot, fdom=15);
 
 # initialize recordings
 irx = collect(1:2:params.nx);
@@ -86,7 +83,7 @@ vel[51:end,:] .= 3500;
 rho = 2000 * ones(nz, nx);  # kg/m^3
 
 # top boundary condition
-free_surface = true;
+free_surface = false;
 
 # vertical and horizontal grid size
 dz = 10; dx = 10;
@@ -94,12 +91,29 @@ dz = 10; dx = 10;
 # time step size and maximum modelling length
 dt = 0.001; tmax = 2.0;
 
+# precision
+data_format=Float64;
+order=5
+
 # organize these parameters into a structure
-params = TdParams(rho, vel, free_surface, dz, dx, dt, tmax; data_format=Float64);
+params = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
+                  data_format=data_format, order=order);
 
 # initialize a source
 isz = 2; isx = 150;
-src = Source(isz, isx, params; amp=100000);
+src = Source(isz, isx, params; amp=100000, fdom=5);
+
+# isx = collect(5:10:295); ns=length(isx);
+# isz = 2   * ones(ns);
+# ot  = 0.5 * rand(ns);
+# pol = rand(Bool, ns);
+# amp = 100000 * ones(ns);
+# for i = 1 : ns
+#     if !pol[i]
+#        amp[i] = - amp[i]
+#     end
+# end
+# srcs = get_multi_sources(isz, isx, params; amp=amp, ot=ot, fdom=5);
 
 # generate observed data
 irx = collect(1:2:params.nx);
@@ -115,7 +129,8 @@ SeisPlotTX(dobs.p, cmap="seismic", pclip=98,
 #                      the gradient based on adjoint method
 # initial velocity model
 vel0 = 3000 * ones(nz, nx);
-params0 = TdParams(rho, vel0, free_surface, dz, dx, dt, tmax; data_format=Float64);
+params0 = TdParams(rho, vel0, free_surface, dz, dx, dt, tmax;
+                   data_format=data_format, order=order);
 
 # generate synthetic data and save the boundary value
 path_bnd = joinpath(homedir(), "Desktop/bnd.rsb");
@@ -132,7 +147,7 @@ SeisPlotTX(dres.p, cmap="seismic", pclip=98,
            xlabel="Traces", ylabel="Time (s)", dy=0.001)
 
 # get the gradient
-g_adj = velocity_gradient(dres, path_bnd, path_wfd, src, params0);
+@time g_adj = velocity_gradient(dres, path_bnd, path_wfd, src, params0);
 g_adj = reshape(g_adj, nz, nx);
 SeisPlotTX(g_adj, cmap="seismic", wbox=9, hbox=3)
 
@@ -143,17 +158,18 @@ vel0    = 3000 * ones(nz, nx);
 delta_m = 1e-7;
 
 # one model parameter's gradient
-iz = 55; ix = 151;
+iz = 51; ix = 151;
 
 # positive velocity model partubation
 vel0[iz,ix] = vel0[iz,ix] + delta_m
 
 # model parameter
-params0 = TdParams(rho, vel0, free_surface, dz, dx, dt, tmax; data_format=Float64);
+params0 = TdParams(rho, vel0, free_surface, dz, dx, dt, tmax;
+                   data_format=data_format, order=order);
 
 # get synthetic data
 dsyn = Recordings(irz, irx, params0);
-multi_step_forward!(dsyn, src, params0);
+multi_step_forward!(dsyn, srcs, params0);
 
 # compute the residue
 dres = get_residue(dsyn, dobs);
@@ -163,11 +179,12 @@ J_plus = 1/2.0 * (norm(dres.p))^2
 vel0[iz,ix] = vel0[iz,ix] - 2*delta_m
 
 # model parameter
-params0 = TdParams(rho, vel0, free_surface, dz, dx, dt, tmax; data_format=Float64);
+params0 = TdParams(rho, vel0, free_surface, dz, dx, dt, tmax;
+                   data_format=data_format, order=order);
 
 # synthetic data
 dsyn = Recordings(irz, irx, params0);
-multi_step_forward!(dsyn, src, params0);
+multi_step_forward!(dsyn, srcs, params0);
 
 # compute the residue
 dres = get_residue(dsyn, dobs);

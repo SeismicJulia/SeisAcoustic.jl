@@ -3,4 +3,4 @@ export get_residue,
        velocity_gradient,
        get_sourceside_wavefield
 
-include("gradient.jl")
+include("velocity_gradient.jl")

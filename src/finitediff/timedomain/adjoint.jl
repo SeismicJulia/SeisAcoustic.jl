@@ -148,8 +148,10 @@ function multi_step_adjoint!(path::String, rec::Recordings, params::TdParams;
 
         if save_flag == "snapshot"
            append_one_snapshot(fid, spt2)
+
         elseif save_flag == "wavefield"
            append_one_wavefield(fid, spt2, params)
+
         elseif save_flag == "pressure"
            append_one_pressure(fid, spt2, params)
         end

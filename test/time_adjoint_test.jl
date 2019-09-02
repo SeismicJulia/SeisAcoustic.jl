@@ -20,7 +20,7 @@ dt = 0.001; tmax = 2.0;  # use second as unit
 
 # organize these parameters into a structure
 params = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
-         data_format=Float32, fd_flag="taylor", order=2, npml=20, apml=900.);
+         data_format=Float32, fd_flag="taylor", order=5, npml=20, apml=900.);
 
 # shows the default value for the keyword parameters
 # data_format = (Float32 or Float64)
@@ -78,7 +78,7 @@ tmp_x1 = zeros(params.data_format, params.Nx);
 tmp_x2 = zeros(params.data_format, params.Nx);
 
 # nt-step forward
-nt = 10
+nt = 1000
 for it = 1 : nt
     one_step_forward!(spt2_f, spt1_f, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2);
     copy_snapshot!(spt1_f, spt2_f);
@@ -139,7 +139,7 @@ for i = 1 : rec2.nr
 end
 
 # save adjoint pz and px as an 3D cube
-path_spt = joinpath(homedir(), "Desktop/tmp_data/snapshot.rsf")
+path_spt = joinpath(homedir(), "Desktop/snapshot.rsf")
 multi_step_adjoint!(path_spt, rec, params; save_flag="snapshot")
 
 # read the adjoint snapshot cube
