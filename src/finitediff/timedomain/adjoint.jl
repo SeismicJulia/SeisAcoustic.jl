@@ -260,8 +260,8 @@ function one_step_backward!(wfd2::Wavefield, wfd1::Wavefield,
     end
 
     # correct for the boundary value
-    for i = 1 : length(params.bnd2wfd)
-        j = params.bnd2wfd[i]
+    for i = 1 : length(params.wfd2bnd)
+        j = params.wfd2bnd[i]
         wfd2.p[j] = bnd.p[i]
     end
 
@@ -304,8 +304,8 @@ function one_step_backward!(wfd2::Wavefield, wfd1::Wavefield,
     end
 
     # correct for boundary part
-    for i = 1 : length(params.bnd2wfd)
-        j = params.bnd2wfd[i]
+    for i = 1 : length(params.wfd2bnd)
+        j = params.wfd2bnd[i]
         wfd2.vz[j] = bnd.vz[i]
         wfd2.vx[j] = bnd.vx[i]
     end
@@ -466,8 +466,8 @@ end
 #     end
 #
 #     # correct for the boundary value
-#     for i = 1 : length(params.bnd2wfd)
-#         j = params.bnd2wfd[i]
+#     for i = 1 : length(params.wfd2bnd)
+#         j = params.wfd2bnd[i]
 #         wfd2.p[j] = bnd.p[i,it]
 #     end
 #
@@ -510,8 +510,8 @@ end
 #     end
 #
 #     # correct for boundary part
-#     for i = 1 : length(params.bnd2wfd)
-#         j = params.bnd2wfd[i]
+#     for i = 1 : length(params.wfd2bnd)
+#         j = params.wfd2bnd[i]
 #         wfd2.vz[j] = bnd.vz[i,it]
 #         wfd2.vx[j] = bnd.vx[i,it]
 #     end
@@ -627,8 +627,8 @@ end
 #     minus!(wfd1.p, wfd2.p, tmp1)
 #
 #     # correct for boundary part of pressure
-#     for i = 1 : length(params.bnd2wfd)
-#         j = params.bnd2wfd[i]
+#     for i = 1 : length(params.wfd2bnd)
+#         j = params.wfd2bnd[i]
 #         wfd1.p[j] = bnd.p[i,it]
 #     end
 #
@@ -642,8 +642,8 @@ end
 #     minus!(wfd1.vz, wfd2.vz, tmp2)
 #
 #     # correct for boundary part of particle velocity
-#     for i = 1 : length(params.bnd2wfd)
-#         j = params.bnd2wfd[i]
+#     for i = 1 : length(params.wfd2bnd)
+#         j = params.wfd2bnd[i]
 #         wfd1.vz[j] = bnd.vz[i,it]
 #         wfd1.vx[j] = bnd.vx[i,it]
 #     end

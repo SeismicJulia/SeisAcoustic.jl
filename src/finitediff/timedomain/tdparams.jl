@@ -59,7 +59,7 @@ struct TdParams{Ti<:Int64, Tv<:AbstractFloat}
     ntop         :: Ti
     spt2wfd      :: Vector{Ti}
     spt2bnd      :: Vector{Ti}
-    bnd2wfd      :: Vector{Ti}
+    wfd2bnd      :: Vector{Ti}
     order        :: Ti
     dz           :: Tv
     dx           :: Tv
@@ -108,6 +108,20 @@ function show(io::IO, params::TdParams)
 
     # data presicion (Float32, Float64)
     @printf("data_format=%16s\n", params.data_format)
+
+    # compute the memory cost of time domain parameters
+    esize = sizeof(params)
+    esize+= 172 + 8*3 + 1 + 8*3
+    esize+= sizeof(params.spt2wfd) + sizeof(params.spt2bnd) + sizeof(params.wfd2bnd)
+    esize+= 8*2 + sizeof(params.data_format) * 4
+    esize+= sizeof(params.rho) + sizeof(params.vel)
+    esize+= sizeof(params.MvzBvz)*8 + sizeof(params.RvzBp)*3
+    esize+= (sizeof(params.dpdz) + sizeof(params.dpdz.m)*2 + sizeof(params.dpdz.rowval) + sizeof(params.dpdz.colptr) + sizeof(params.dpdz.nzval)) * 4
+    esize+= (sizeof(params.rpdz) + sizeof(params.rpdz.m)*2 + sizeof(params.rpdz.rowval) + sizeof(params.rpdz.colptr) + sizeof(params.rpdz.nzval)) * 4
+
+    # convert to mega byte
+    esize = esize / 1024^2
+    @printf("esize of TdParams=%4.1f\n", esize)
 
     return nothing
 end
@@ -449,7 +463,7 @@ function TdParams(rho, vel, free_surface::Bool, dz, dx, dt, tmax;
     nt = round(Int64, tmax/dt) + 1
 
     # compute auxillary index vectors
-    (spt2wfd, spt2bnd, bnd2wfd) = get_index(nz, nx, npml, free_surface; order=order)
+    (spt2wfd, spt2bnd, wfd2bnd) = get_index(nz, nx, npml, free_surface; order=order)
 
     # Z direction pml coefficients
     if free_surface
@@ -495,7 +509,7 @@ function TdParams(rho, vel, free_surface::Bool, dz, dx, dt, tmax;
 
     # call the default struct constructor
     return TdParams(data_format, nz, nx, npml, free_surface, Nz, Nx, ntop,
-                       spt2wfd, spt2bnd, bnd2wfd, order,
+                       spt2wfd, spt2bnd, wfd2bnd, order,
                        dz, dx, dt, tmax, nt, rho, vel,
                        MvzBvz, MvzBp , RvzBp , dpdz, rpdz,
                        MvxBvx, MvxBp , RvxBp , dpdx, rpdx,

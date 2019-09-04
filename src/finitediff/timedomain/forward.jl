@@ -290,12 +290,30 @@ function multi_step_forward!(path::String, srcs::Vector{Source}, params::TdParam
     return nothing
 end
 
+# define a auxillary function to improve efficiency
+function source_strength!(strength, spt1, spt2, params)
+
+    # total number of elements
+    N = params.nz * params.nx
+
+    for i = 1 : N
+        j = params.spt2wfd[i]
+
+        p2= spt2.pz[j]+spt2.px[j]
+        p1= spt1.pz[j]+spt1.px[j]
+
+        tmp = 2.0 * (p2 - p1) / params.vel[i]
+        strength[i] += tmp * tmp
+    end
+    return nothing
+end
+
 """
    compute the recordings via forward modelling with single source, the boundary and the wavefield
 at the last time step are saved if "path_bnd" and "path_wfd" are given.
 """
 function multi_step_forward!(rec::Recordings, src::Source, params::TdParams;
-         path_bnd="NULL", path_wfd="NULL")
+         path_bnd="NULL", path_wfd="NULL", path_sws="NULL", print_interval=0)
 
     # initialize variables for time stepping
     spt1 = Snapshot(params)
@@ -318,11 +336,23 @@ function multi_step_forward!(rec::Recordings, src::Source, params::TdParams;
        append_one_boundary(fid, spt1, params)
     end
 
+    # save the strength of source-side wavefield
+    if path_sws != "NULL"
+       N = params.nz * params.nx
+       strength = zeros(params.data_format, N)
+    end
+
     # loop over time stepping
     for it = 2 : params.nt
 
         # one time stepping
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+
+        # compute source-side wavefield
+        if path_sws != "NULL"
+           source_strength!(strength, spt1, spt2, params)
+        end
+
         add_source!(spt2, src, it)
 
         # sampling snapshot to get recordings
@@ -335,11 +365,23 @@ function multi_step_forward!(rec::Recordings, src::Source, params::TdParams;
 
         # prepare for next iteration
         copy_snapshot!(spt1, spt2)
+
+        # print progress infomation
+        if print_interval != 0 && mod(it, print_interval) == 0
+           @printf("finished %5d steps, remain %5d steps\n", it, params.nt-it)
+        end
     end
 
     # finish saving all the boundary values, close the file
     if path_bnd != "NULL"
        close(fid)
+    end
+
+    # save the source-side wavefield strength to disk
+    if path_sws != "NULL"
+       strength  = reshape(strength, params.nz, params.nx)
+       hdr       = RegularSampleHeader(strength; title="source strength")
+       write_RSdata(path_sws, hdr, strength)
     end
 
     # save the wavefield at the final time step
@@ -356,7 +398,7 @@ end
 at the last time step are saved if "path_bnd" and "path_wfd" are given.
 """
 function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::TdParams;
-         path_bnd="NULL", path_wfd="NULL")
+         path_bnd="NULL", path_wfd="NULL", path_sws="NULL")
 
     # initialize variables for time stepping
     spt1 = Snapshot(params)
@@ -379,11 +421,23 @@ function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::TdPa
        append_one_boundary(fid, spt1, params)
     end
 
+    # save the strength of source-side wavefield
+    if path_sws != "NULL"
+       N = params.nz * params.nx
+       strength = zeros(params.data_format, N)
+    end
+
     # loop over time stepping
     for it = 2 : params.nt
 
         # one time step
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
+
+        # compute source-side wavefield
+        if path_sws != "NULL"
+           source_strength!(strength, spt1, spt2, params)
+        end
+
         add_multi_sources!(spt2, srcs, it)
 
         # sample the snapshot to get recordings
@@ -401,6 +455,13 @@ function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::TdPa
     # finish saving all the boundary values, close the file
     if path_bnd != "NULL"
        close(fid)
+    end
+
+    # save the source-side wavefield strength to disk
+    if path_sws != "NULL"
+       strength  = reshape(strength, params.nz, params.nx)
+       hdr       = RegularSampleHeader(strength; title="source strength")
+       write_RSdata(path_sws, hdr, strength)
     end
 
     # save the wavefield at the final time step
@@ -459,8 +520,8 @@ function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield,
     end
 
     # correct for boundary part
-    for i = 1 : length(params.bnd2wfd)
-        j = params.bnd2wfd[i]
+    for i = 1 : length(params.wfd2bnd)
+        j = params.wfd2bnd[i]
         wfd2.vz[j] = bnd.vz[i]
         wfd2.vx[j] = bnd.vx[i]
     end
@@ -504,8 +565,8 @@ function one_step_forward!(wfd2::Wavefield, wfd1::Wavefield,
     end
 
     # correct for boundary part
-    for i = 1 : length(params.bnd2wfd)
-        j = params.bnd2wfd[i]
+    for i = 1 : length(params.wfd2bnd)
+        j = params.wfd2bnd[i]
         wfd2.p[j] = bnd.p[i]
     end
 
@@ -704,8 +765,8 @@ end
 #     end
 #
 #     # correct for boundary part
-#     for i = 1 : length(params.bnd2wfd)
-#         j = params.bnd2wfd[i]
+#     for i = 1 : length(params.wfd2bnd)
+#         j = params.wfd2bnd[i]
 #         wfd2.vz[j] = bnd.vz[i]
 #         wfd2.vx[j] = bnd.vx[i]
 #     end
@@ -724,8 +785,8 @@ end
 #     end
 #
 #     # correct for boundary part
-#     for i = 1 : length(params.bnd2wfd)
-#         j = params.bnd2wfd[i]
+#     for i = 1 : length(params.wfd2bnd)
+#         j = params.wfd2bnd[i]
 #         wfd2.p[j] = bnd.p[i]
 #     end
 #
@@ -951,8 +1012,8 @@ end
 #     addition!(wfd2.vx, wfd1.vx, tmp2)
 #
 #     # correct for boundary part
-#     for i = 1 : length(params.bnd2wfd)
-#         j = params.bnd2wfd[i]
+#     for i = 1 : length(params.wfd2bnd)
+#         j = params.wfd2bnd[i]
 #         wfd2.vz[j] = bnd.vz[i,it]
 #         wfd2.vx[j] = bnd.vx[i,it]
 #     end
@@ -964,8 +1025,8 @@ end
 #     addition!(wfd2.p, wfd1.p, tmp1)
 #
 #     # correct for boundary part
-#     for i = 1 : length(params.bnd2wfd)
-#         j = params.bnd2wfd[i]
+#     for i = 1 : length(params.wfd2bnd)
+#         j = params.wfd2bnd[i]
 #         wfd2.p[j] = bnd.p[i,it]
 #     end
 #
