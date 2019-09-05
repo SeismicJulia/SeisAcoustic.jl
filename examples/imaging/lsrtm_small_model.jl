@@ -45,16 +45,16 @@ dobs= Recordings(irz, irx, params);
 
 # remove direct arrival
 rho1 = copy(rho); rho1 .= minimum(rho);
-vel1 = copy(vel); vel1 .= minimum(vel);
+vel1 = copy(vel); vel1 .= vel[1];
 params1 = TdParams(rho1, vel1, free_surface, dz, dx, dt, tmax;
                   data_format=Float32, order=5, fd_flag="taylor");
 
 dobs1= Recordings(irz, irx, params1);
 @time multi_step_forward!(dobs1, src, params1; print_interval=500);
 
-SeisPlotTX(dobs.p, dy=dt, cmap="gray");
-SeisPlotTX(dobs1.p, dy=dt, cmap="gray");
-SeisPlotTX(dobs.p-dobs1.p, dy=dt, cmap="gray");
+SeisPlotTX(dobs.p, dy=dt, cmap="gray", wbox=10, hbox=10);
+SeisPlotTX(dobs1.p, dy=dt, cmap="gray", wbox=10, hbox=10);
+SeisPlotTX(dobs.p-dobs1.p, dy=dt, cmap="gray", wbox=10, hbox=10);
 figure(); plot(dobs.p[:,400])
 figure(); plot(dobs.p[:,100])
 
