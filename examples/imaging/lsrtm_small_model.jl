@@ -12,23 +12,17 @@ path_vel = joinpath(work_dir, "physical_model/vel.rsf");
 (hdr_vel, vel) = read_RSdata(path_vel);
 
 # # cropped model for imaging
-# vel = vel[1:1300,1:3700];
-# rho = rho[1:1300,1:3700];
+vel = vel[1:2:1350,650:2:3700];
+rho = rho[1:2:1350,650:2:3700];
+
 # SeisPlotTX(vel, hbox=1.3*3, wbox=3.7*3, cmap="rainbow", vmin=minimum(vel), vmax=maximum(vel));
 # SeisPlotTX(rho, hbox=1.3*3, wbox=3.7*3, cmap="rainbow", vmin=minimum(rho), vmax=maximum(rho));
-
-
-# # cropped model for frequency dispersion
-vel = vel[1:500,1:1500];
-rho = rho[1:500,1:1500];
-SeisPlotTX(vel, hbox=1, wbox=30, cmap="rainbow", vmin=minimum(vel), vmax=maximum(vel));
-SeisPlotTX(rho, hbox=1, wbox=30, cmap="rainbow", vmin=minimum(rho), vmax=maximum(rho));
 
 # vertical and horizontal grid size
 dz = 6.25; dx = 6.25;
 
 # time step size and maximum modelling length
-dt = 0.0005; tmax = 6.0;
+dt = 0.0008; tmax = 6.0;
 
 # top boundary condition
 free_surface = false;
@@ -47,20 +41,20 @@ irz = 2 * ones(length(irx));
 dobs= Recordings(irz, irx, params);
 
 # simulation
-@time multi_step_forward!(dobs, src, params; print_interval=1000);
+@time multi_step_forward!(dobs, src, params; print_interval=500);
 
-rho1  = copy(rho);
-rho1 .= minimum(rho1);
-params1 = TdParams(rho1, vel, free_surface, dz, dx, dt, tmax;
+# remove direct arrival
+rho1 = copy(rho); rho1 .= minimum(rho);
+vel1 = copy(vel); vel1 .= minimum(vel);
+params1 = TdParams(rho1, vel1, free_surface, dz, dx, dt, tmax;
                   data_format=Float32, order=5, fd_flag="taylor");
+
 dobs1= Recordings(irz, irx, params1);
-@time multi_step_forward!(dobs1, src, params1; print_interval=1000);
+@time multi_step_forward!(dobs1, src, params1; print_interval=500);
 
-
-path_obs = joinpath(work_dir, "recordings/5_5_20.rsf");
-write_recordings_tmp(path_obs, dobs);
-
-SeisPlotTX(dobs.p, dy=dt, cmap="gray", pclip=90);
+SeisPlotTX(dobs.p, dy=dt, cmap="gray");
+SeisPlotTX(dobs1.p, dy=dt, cmap="gray");
+SeisPlotTX(dobs.p-dobs1.p, dy=dt, cmap="gray");
 figure(); plot(dobs.p[:,400])
 figure(); plot(dobs.p[:,100])
 
@@ -124,6 +118,7 @@ path_in = join([path "$i" ".bin"]);
 (hdr, d) = read_USdata(path_in);
 SeisPlot(d, cmap="seismic", pclip=95);
 
+# scp -r /Users/wenlei/Desktop/tmp_LSRTM/physical_model/ wgao1@saig-ml.physics.ualberta.ca:/home/wgao1/lsrtm
 
 # # ==============================================================================
 # #             convert physical model of SU to RSF

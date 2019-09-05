@@ -115,13 +115,15 @@ function show(io::IO, params::TdParams)
     esize+= sizeof(params.spt2wfd) + sizeof(params.spt2bnd) + sizeof(params.wfd2bnd)
     esize+= 8*2 + sizeof(params.data_format) * 4
     esize+= sizeof(params.rho) + sizeof(params.vel)
-    esize+= sizeof(params.MvzBvz)*8 + sizeof(params.RvzBp)*3
-    esize+= (sizeof(params.dpdz) + sizeof(params.dpdz.m)*2 + sizeof(params.dpdz.rowval) + sizeof(params.dpdz.colptr) + sizeof(params.dpdz.nzval)) * 4
-    esize+= (sizeof(params.rpdz) + sizeof(params.rpdz.m)*2 + sizeof(params.rpdz.rowval) + sizeof(params.rpdz.colptr) + sizeof(params.rpdz.nzval)) * 4
+    esize+= sizeof(params.MvzBvz)*2 + sizeof(params.MvxBvx)*2 + sizeof(params.MvzBp)*4 + sizeof(params.RvzBp)*3
+    esize+= (sizeof(params.dpdz) + sizeof(params.dpdz.m)*2 + sizeof(params.dpdz.rowval) + sizeof(params.dpdz.colptr) + sizeof(params.dpdz.nzval)) * 2
+    esize+= (sizeof(params.dpdx) + sizeof(params.dpdx.m)*2 + sizeof(params.dpdx.rowval) + sizeof(params.dpdx.colptr) + sizeof(params.dpdx.nzval)) * 2
+    esize+= (sizeof(params.rpdz) + sizeof(params.rpdz.m)*2 + sizeof(params.rpdz.rowval) + sizeof(params.rpdz.colptr) + sizeof(params.rpdz.nzval)) * 2
+    esize+= (sizeof(params.rpdz) + sizeof(params.rpdx.m)*2 + sizeof(params.rpdx.rowval) + sizeof(params.rpdx.colptr) + sizeof(params.rpdx.nzval)) * 2
 
     # convert to mega byte
     esize = esize / 1024^2
-    @printf("esize of TdParams=%4.1f\n", esize)
+    @printf("esize of TdParams=%6.3f M\n", esize)
 
     return nothing
 end
