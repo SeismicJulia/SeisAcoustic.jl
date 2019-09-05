@@ -1,41 +1,28 @@
 using SeisPlot, SeisAcoustic
 
+# ==============================================================================
+#             read physical model
 work_dir = joinpath(homedir(), "Desktop/tmp_LSRTM");
 
-path_rho = joinpath(work_dir, "physical_model/rho.su");
-path_vel = joinpath(work_dir, "physical_model/vel.su");
+path_rho = joinpath(work_dir, "physical_model/rho.rsf");
+path_vel = joinpath(work_dir, "physical_model/vel.rsf");
 
-num_samples = 1911;
-num_traces  = 5395;
-trace = zeros(Float32, num_samples);
-vel   = zeros(Float32, num_samples, num_traces);
-rho   = zeros(Float32, num_samples, num_traces);
+# read the physical model
+(hdr_rho, rho) = read_RSdata(path_rho);
+(hdr_vel, vel) = read_RSdata(path_vel);
 
-fid_vel = open(path_vel, "r");
-fid_rho = open(path_rho, "r");
-idx = [1];
-for i = 1 : num_traces
-    skip(fid_vel, 240)
-    skip(fid_rho, 240)
-
-    read!(fid_vel, trace)
-    copyto!(vel, idx[1], trace, 1, num_samples)
-
-    read!(fid_rho, trace)
-    copyto!(rho, idx[1], trace, 1, num_samples)
-    idx[1] = idx[1] + num_samples
-end
-close(fid_vel);
-close(fid_rho);
-
+# # cropped model for imaging
 # vel = vel[1:1300,1:3700];
 # rho = rho[1:1300,1:3700];
+# SeisPlotTX(vel, hbox=1.3*3, wbox=3.7*3, cmap="rainbow", vmin=minimum(vel), vmax=maximum(vel));
+# SeisPlotTX(rho, hbox=1.3*3, wbox=3.7*3, cmap="rainbow", vmin=minimum(rho), vmax=maximum(rho));
 
-vel = vel[1:400,1:1000];
-rho = rho[1:400,1:1000];
 
-SeisPlotTX(vel, hbox=1.3*3, wbox=3.7*3, cmap="rainbow", vmin=minimum(vel), vmax=maximum(vel));
-SeisPlotTX(rho, hbox=1.3*3, wbox=3.7*3, cmap="rainbow", vmin=minimum(rho), vmax=maximum(rho));
+# # cropped model for frequency dispersion
+vel = vel[1:500,1:1500];
+rho = rho[1:500,1:1500];
+SeisPlotTX(vel, hbox=1, wbox=30, cmap="rainbow", vmin=minimum(vel), vmax=maximum(vel));
+SeisPlotTX(rho, hbox=1, wbox=30, cmap="rainbow", vmin=minimum(rho), vmax=maximum(rho));
 
 # vertical and horizontal grid size
 dz = 6.25; dx = 6.25;
@@ -46,25 +33,39 @@ dt = 0.0005; tmax = 6.0;
 # top boundary condition
 free_surface = false;
 
-# precision
-data_format=Float32;
-order=3;
-
 # organize these parameters into a structure
 params = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
-                  data_format=data_format, order=order);
+                  data_format=Float32, order=5, fd_flag="taylor");
 
 # initialize a source
-isz = 2; isx = 501;
-src = Source(isz, isx, params; amp=100000, fdom=20);
+isz = 2; isx = 1;
+src = Source(isz, isx, params; amp=100000, fdom=20, type_flag="miniphase");
 
 # generate observed data
 irx = collect(1:2:params.nx);
 irz = 2 * ones(length(irx));
 dobs= Recordings(irz, irx, params);
 
-@time multi_step_forward!(dobs, src, params; print_interval=200);
+# simulation
+@time multi_step_forward!(dobs, src, params; print_interval=1000);
 
+rho1  = copy(rho);
+rho1 .= minimum(rho1);
+params1 = TdParams(rho1, vel, free_surface, dz, dx, dt, tmax;
+                  data_format=Float32, order=5, fd_flag="taylor");
+dobs1= Recordings(irz, irx, params1);
+@time multi_step_forward!(dobs1, src, params1; print_interval=1000);
+
+
+path_obs = joinpath(work_dir, "recordings/5_5_20.rsf");
+write_recordings_tmp(path_obs, dobs);
+
+SeisPlotTX(dobs.p, dy=dt, cmap="gray", pclip=90);
+figure(); plot(dobs.p[:,400])
+figure(); plot(dobs.p[:,100])
+
+path_obs = joinpath(work_dir, "recordings/ls10_6.25_20.rsf");
+dobs1 = read_recordings(path_obs);
 
 # ==============================================================================
 #      generate reflected shot recordings, the direct arrival is removed
@@ -124,6 +125,49 @@ path_in = join([path "$i" ".bin"]);
 SeisPlot(d, cmap="seismic", pclip=95);
 
 
+# # ==============================================================================
+# #             convert physical model of SU to RSF
+# work_dir = joinpath(homedir(), "Desktop/tmp_LSRTM");
+#
+# path_rho = joinpath(work_dir, "physical_model/rho.su");
+# path_vel = joinpath(work_dir, "physical_model/vel.su");
+#
+# num_samples = 1911;
+# num_traces  = 5395;
+# trace = zeros(Float32, num_samples);
+# vel   = zeros(Float32, num_samples, num_traces);
+# rho   = zeros(Float32, num_samples, num_traces);
+#
+# fid_vel = open(path_vel, "r");
+# fid_rho = open(path_rho, "r");
+# idx = [1];
+# for i = 1 : num_traces
+#     skip(fid_vel, 240)
+#     skip(fid_rho, 240)
+#
+#     read!(fid_vel, trace)
+#     copyto!(vel, idx[1], trace, 1, num_samples)
+#
+#     read!(fid_rho, trace)
+#     copyto!(rho, idx[1], trace, 1, num_samples)
+#     idx[1] = idx[1] + num_samples
+# end
+# close(fid_vel);
+# close(fid_rho);
+#
+# # save the physical model
+# hdr_rho = RegularSampleHeader(rho; o1=0., d1=6.25, label1="Z", unit1="m",
+#                                    o2=0., d2=6.25, label2="X", unit2="m",
+#                                    title="density model");
+#
+# hdr_vel = RegularSampleHeader(vel; o1=0., d1=6.25, label1="Z", unit1="m",
+#                                    o2=0., d2=6.25, label2="X", unit2="m",
+#                                    title="velocity model");
+#
+# path_rho = joinpath(work_dir, "physical_model/rho.rsf");
+# path_vel = joinpath(work_dir, "physical_model/vel.rsf");
+# write_RSdata(path_rho, hdr_rho, rho);
+# write_RSdata(path_vel, hdr_vel, vel);
 
 # ==============================================================================
 #    get the bounds of source-side wavefield and the source intensity

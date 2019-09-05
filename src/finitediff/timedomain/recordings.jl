@@ -86,16 +86,16 @@ function write_recordings(path::String, rec::Recordings)
     write(fid, rec.nr)
 
     # write the locations of receivers (index)
-    write(fid, irz)
-    write(fid, irx)
+    write(fid, rec.irz)
+    write(fid, rec.irx)
 
     # write the index mapping vector
-    write(fid, spt2rec)
+    write(fid, rec.spt2rec)
 
     # write the data_format code
     if eltype(rec.p) == Float32
        write(fid, 1)             # 1 indicate Float32
-    elseif eltyoe(rec.p) == Float64
+    elseif eltype(rec.p) == Float64
        write(fid, 2)             # 2 indicate Float64
     else
        error("non-support data format")
