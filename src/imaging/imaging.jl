@@ -9,9 +9,12 @@ export add_virtual_source,
        get_residue,
        get_sourceside_wavefield,
        apply_image_condition!,
-       velocity_gradient
+       velocity_gradient,
+# # ==================== get reflections ==========
+       get_reflections
 
 
 include("born_forward.jl")
 include("born_adjoint.jl")
 include("velocity_gradient.jl")
+include("get_reflections.jl")

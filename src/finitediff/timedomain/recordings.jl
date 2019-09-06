@@ -95,8 +95,10 @@ function write_recordings(path::String, rec::Recordings)
     # write the data_format code
     if eltype(rec.p) == Float32
        write(fid, 1)             # 1 indicate Float32
+
     elseif eltype(rec.p) == Float64
        write(fid, 2)             # 2 indicate Float64
+
     else
        error("non-support data format")
     end
