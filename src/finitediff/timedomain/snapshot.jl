@@ -76,13 +76,13 @@ end
 """
    Create header of regularly sampled data for snapshot
 """
-function snapshot_header(params::TdParams)
+function snapshot_header(params::TdParams, interval::Int64)
 
     # the size of data
     n1 = params.Nz
     n2 = params.Nx
     n3 = 4       # include vz, vx, pz, px
-    n4 = params.nt
+    n4 = floor(Int64, (params.nt-1)/interval) + 1
 
     # label
     label1="z-axis"
@@ -91,8 +91,8 @@ function snapshot_header(params::TdParams)
     label4="time step"
 
     return RegularSampleHeader(n1=n1, n2=n2, n3=n3, n4=n4,
-           o1=0.0      , o2=0.0      , o3=1.0, o4=0.0      ,
-           d1=params.dz, d2=params.dx, d3=1.0, d4=params.dt,
+           o1=0.0      , o2=0.0      , o3=1.0, o4=0.0    ,
+           d1=params.dz, d2=params.dx, d3=1.0, d4=params.dt*interval,
            label1=label1, label2=label2, label3=label3, label4=label4,
            title="snapshots", data_format=params.data_format)
 end
@@ -135,13 +135,13 @@ end
 """
    create a header for wavefield in regularly sampled data format
 """
-function wavefield_header(params::TdParams)
+function wavefield_header(params::TdParams, interval::Int64)
 
     # the size of data
     n1 = params.nz
     n2 = params.nx
     n3 = 3      # include(vz, vx, p)
-    n4 = params.nt
+    n4 = floor(Int64, (params.nt-1)/interval) + 1
 
     # label
     label1="z-axis"
@@ -151,7 +151,7 @@ function wavefield_header(params::TdParams)
 
     return RegularSampleHeader(n1=n1, n2=n2, n3=n3, n4=n4,
            o1=0.0, o2=0.0, o3=1.0, o4=0.0,
-           d1=params.dz, d2=params.dx, d3=1.0, d4=params.dt,
+           d1=params.dz, d2=params.dx, d3=1.0, d4=params.dt*interval,
            label1=label1, label2=label2, label3=label3, label4=label4,
            title="wavefield", data_format=params.data_format)
 end
@@ -235,12 +235,12 @@ end
 """
    create a header of regularly sampled data for pressure
 """
-function pressure_header(params::TdParams)
+function pressure_header(params::TdParams, interval::Int64)
 
     # the size of data
     n1 = params.nz
     n2 = params.nx
-    n3 = params.nt
+    n3 = floor(Int64, (params.nt-1)/interval) + 1
 
     # label
     label1="z-axis"
@@ -249,7 +249,7 @@ function pressure_header(params::TdParams)
 
     return RegularSampleHeader(n1=n1, n2=n2, n3=n3,
            o1=0.0, o2=0.0, o3=1.0,
-           d1=params.dz, d2=params.dx, d3=params.dt,
+           d1=params.dz, d2=params.dx, d3=params.dt*interval,
            label1=label1, label2=label2, label3=label3,
            title="pressure", data_format=params.data_format)
 end

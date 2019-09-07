@@ -153,14 +153,17 @@ function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::TdPar
     return nothing
 end
 
+# ==============================================================================
+#              save snapshot, wavefield or pressure
+# ==============================================================================
 """
 save snapshot or full wave field or pressure field to hard drive, inject single source
 save_type="snapshot" : vz, vx, pz, px include PML part,
 save_type="wavefield": vz, vx, pz+px  without PML part,
 save_type="pressure" : p=pz+px without PML bounary part.
 """
-function multi_step_forward!(path::String, src::Source, params::TdParams;
-                             save_flag="pressure")
+function multi_step_forward!(rec::Recordings, src::Source, params::TdParams;
+                             path_spt="NULL", path_wfd="NULL", path_pre="NULL", interval=1)
 
     # initialize some variables
     spt1 = Snapshot(params)
@@ -172,28 +175,27 @@ function multi_step_forward!(path::String, src::Source, params::TdParams;
 
     # add source to the first snapshot
     add_source!(spt1, src, 1)
+    sample_spt2rec!(rec, spt1, 1)
 
     # save snapshot
-    if save_flag == "snapshot"
-       hdr = snapshot_header(params)
-       fid = write_RSheader(path, hdr)
-       append_one_snapshot(fid, spt1)
+    if path_spt != "NULL"
+       hdr_spt   = snapshot_header(params, interval)
+       fid_spt   = write_RSheader(path_spt, hdr_spt)
+       append_one_snapshot(fid_spt, spt1)
+    end
 
     # save wavefield
-    elseif save_flag == "wavefield"
-       hdr = wavefield_header(params)
-       fid = write_RSheader(path, hdr)
-       append_one_wavefield(fid, spt1, params)
+    if path_wfd != "NULL"
+       hdr_wfd   = wavefield_header(params, interval)
+       fid_wfd   = write_RSheader(path_wfd, hdr_wfd)
+       append_one_wavefield(fid_wfd, spt1, params)
+    end
 
     # save pressure
-    elseif save_flag == "pressure"
-       hdr = pressure_header(params)
-       fid = write_RSheader(path, hdr)
-       append_one_pressure(fid, spt1, params)
-
-    else
-       error("save_type only support snapshot, wavefield or pressure")
-
+    if path_pre != "NULL"
+       hdr_pre   = pressure_header(params, interval)
+       fid_pre   = write_RSheader(path_pre, hdr_pre)
+       append_one_pressure(fid_pre, spt1, params)
     end
 
     # applying time stepping nt-1 times
@@ -202,24 +204,24 @@ function multi_step_forward!(path::String, src::Source, params::TdParams;
         # one step forward
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         add_source!(spt2, src, it)
+        sample_spt2rec!(rec, spt2, it)
 
         # write current wavefield to disk
-        if save_flag == "snapshot"
-           append_one_snapshot(fid, spt2)
-
-        elseif save_flag == "wavefield"
-           append_one_wavefield(fid, spt2, params)
-
-        elseif save_flag == "pressure"
-           append_one_pressure(fid, spt2, params)
+        if mod(it-1, interval) == 0
+           path_spt != "NULL" && append_one_snapshot(fid_spt, spt2)
+           path_wfd != "NULL" && append_one_wavefield(fid_wfd, spt2, params)
+           path_pre != "NULL" && append_one_pressure(fid_pre, spt2, params)
         end
 
         # prepare for next time stepping
         copy_snapshot!(spt1, spt2)
-
     end
 
-    close(fid)
+    # close file
+    path_spt != "NULL" && close(fid_spt)
+    path_wfd != "NULL" && close(fid_wfd)
+    path_pre != "NULL" && close(fid_pre)
+
     return nothing
 end
 
@@ -229,8 +231,8 @@ save_type="snapshot" : vz, vx, pz, px include PML part,
 save_type="wavefield": vz, vx, pz+px  without PML part,
 save_type="pressure" : p=pz+px without PML bounary part.
 """
-function multi_step_forward!(path::String, srcs::Vector{Source}, params::TdParams;
-                            save_flag="pressure")
+function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::TdParams;
+                             path_spt="NULL", path_wfd="NULL", path_pre="NULL", interval=1)
 
     # initialize some variables
     spt1 = Snapshot(params)
@@ -242,27 +244,27 @@ function multi_step_forward!(path::String, srcs::Vector{Source}, params::TdParam
 
     # add source to the first snapshot
     add_multi_sources!(spt1, srcs, 1)
+    sample_spt2rec!(rec, spt1, 1)
 
     # save snapshot
-    if save_flag == "snapshot"
-       hdr = snapshot_header(params)
-       fid = write_RSheader(path, hdr)
-       append_one_snapshot(fid, spt1)
+    if path_spt != "NULL"
+       hdr_spt   = snapshot_header(params, interval)
+       fid_spt   = write_RSheader(path_spt, hdr_spt)
+       append_one_snapshot(fid_spt, spt1)
+    end
 
     # save wavefield
-    elseif save_flag == "wavefield"
-       hdr = wavefield_header(params)
-       fid = write_RSheader(path, hdr)
-       append_one_wavefield(fid, spt1, params)
+    if path_wfd != "NULL"
+       hdr_wfd   = wavefield_header(params, interval)
+       fid_wfd   = write_RSheader(path_wfd, hdr_wfd)
+       append_one_wavefield(fid_wfd, spt1, params)
+    end
 
     # save pressure
-    elseif save_flag == "pressure"
-       hdr = pressure_header(params)
-       fid = write_RSheader(path, hdr)
-       append_one_pressure(fid, spt1, params)
-
-    else
-       error("save_type only support snapshot, wavefield or pressure")
+    if path_pre != "NULL"
+       hdr_pre   = pressure_header(params, interval)
+       fid_pre   = write_RSheader(path_pre, hdr_pre)
+       append_one_pressure(fid_pre, spt1, params)
     end
 
     # applying time stepping nt-1 times
@@ -271,22 +273,24 @@ function multi_step_forward!(path::String, srcs::Vector{Source}, params::TdParam
         # one step forward
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         add_multi_sources!(spt2, srcs, it)
+        sample_spt2rec!(rec, spt2, it)
 
-        if save_flag == "snapshot"
-           append_one_snapshot(fid, spt2)
-
-        elseif save_flag == "wavefield"
-           append_one_wavefield(fid, spt2, params)
-
-        elseif save_flag == "pressure"
-           append_one_pressure(fid, spt2, params)
+        # write current wavefield to disk
+        if mod(it-1, interval) == 0
+           path_spt != "NULL" && append_one_snapshot(fid_spt, spt2)
+           path_wfd != "NULL" && append_one_wavefield(fid_wfd, spt2, params)
+           path_pre != "NULL" && append_one_pressure(fid_pre, spt2, params)
         end
 
         # prepare for next time stepping
         copy_snapshot!(spt1, spt2)
     end
 
-    close(fid)
+    # close file
+    path_spt != "NULL" && close(fid_spt)
+    path_wfd != "NULL" && close(fid_wfd)
+    path_pre != "NULL" && close(fid_pre)
+
     return nothing
 end
 
@@ -308,12 +312,18 @@ function source_strength!(strength, spt1, spt2, params)
     return nothing
 end
 
+# ==============================================================================
+#    save boundary, last wavefield or the strength of sourceside wavefield
+# ==============================================================================
 """
    compute the recordings via forward modelling with single source, the boundary and the wavefield
 at the last time step are saved if "path_bnd" and "path_wfd" are given.
 """
-function multi_step_forward!(rec::Recordings, src::Source, params::TdParams;
-         path_bnd="NULL", path_wfd="NULL", path_sws="NULL", print_interval=0)
+function multi_step_forward!(src::Source, params::TdParams;
+                             path_bnd="NULL", path_wfd="NULL", path_sws="NULL")
+
+    # at least one output
+    path_bnd == "NULL" && path_bnd == "NULL" && path_bnd == "NULL" && error("at least one output")
 
     # initialize variables for time stepping
     spt1 = Snapshot(params)
@@ -325,9 +335,6 @@ function multi_step_forward!(rec::Recordings, src::Source, params::TdParams;
 
     # add source to the first snapshot
     add_source!(spt1, src, 1)
-
-    # obtain the first time sample of recordings
-    sample_spt2rec!(rec, spt1, 1)
 
     # save the boundary of the first wavefield
     if path_bnd != "NULL"
@@ -349,33 +356,19 @@ function multi_step_forward!(rec::Recordings, src::Source, params::TdParams;
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
 
         # compute source-side wavefield
-        if path_sws != "NULL"
-           source_strength!(strength, spt1, spt2, params)
-        end
+        path_sws != "NULL" && source_strength!(strength, spt1, spt2, params)
 
         add_source!(spt2, src, it)
 
-        # sampling snapshot to get recordings
-        sample_spt2rec!(rec, spt2, it)
-
         # save boundary of wavefield
-        if path_bnd != "NULL"
-           append_one_boundary(fid, spt2, params)
-        end
+        path_bnd != "NULL" && append_one_boundary(fid, spt2, params)
 
         # prepare for next iteration
         copy_snapshot!(spt1, spt2)
-
-        # print progress infomation
-        if print_interval != 0 && mod(it, print_interval) == 0
-           @printf("finished %5d steps, remain %5d steps\n", it, params.nt-it)
-        end
     end
 
     # finish saving all the boundary values, close the file
-    if path_bnd != "NULL"
-       close(fid)
-    end
+    path_bnd != "NULL" && close(fid)
 
     # save the source-side wavefield strength to disk
     if path_sws != "NULL"
@@ -397,8 +390,11 @@ end
    compute the recordings via forward modelling with simultaneouse source, the boundary and the wavefield
 at the last time step are saved if "path_bnd" and "path_wfd" are given.
 """
-function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::TdParams;
-         path_bnd="NULL", path_wfd="NULL", path_sws="NULL")
+function multi_step_forward!(srcs::Vector{Source}, params::TdParams;
+                             path_bnd="NULL", path_wfd="NULL", path_sws="NULL")
+
+    # at least one output
+    path_bnd == "NULL" && path_bnd == "NULL" && path_bnd == "NULL" && error("at least one output")
 
     # initialize variables for time stepping
     spt1 = Snapshot(params)
@@ -410,9 +406,6 @@ function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::TdPa
 
     # add source to the first snapshot
     add_multi_sources!(spt1, srcs, 1)
-
-    # obtain the first time sample of recordings
-    sample_spt2rec!(rec, spt1, 1)
 
     # save the boundary of the first wavefield
     if path_bnd != "NULL"
@@ -430,32 +423,23 @@ function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::TdPa
     # loop over time stepping
     for it = 2 : params.nt
 
-        # one time step
+        # one time stepping
         one_step_forward!(spt2, spt1, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
 
         # compute source-side wavefield
-        if path_sws != "NULL"
-           source_strength!(strength, spt1, spt2, params)
-        end
+        path_sws != "NULL" && source_strength!(strength, spt1, spt2, params)
 
         add_multi_sources!(spt2, srcs, it)
 
-        # sample the snapshot to get recordings
-        sample_spt2rec!(rec, spt2, it)
-
         # save boundary of wavefield
-        if path_bnd != "NULL"
-           append_one_boundary(fid, spt2, params)
-        end
+        path_bnd != "NULL" && append_one_boundary(fid, spt2, params)
 
         # prepare for next iteration
         copy_snapshot!(spt1, spt2)
     end
 
     # finish saving all the boundary values, close the file
-    if path_bnd != "NULL"
-       close(fid)
-    end
+    path_bnd != "NULL" && close(fid)
 
     # save the source-side wavefield strength to disk
     if path_sws != "NULL"
@@ -473,6 +457,9 @@ function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::TdPa
     return nothing
 end
 
+# ==============================================================================
+#          one step forward modelling with saved boundary value
+# ==============================================================================
 """
    one step-forward reconstruction of wavefield via recording the boundary value
 """
@@ -1257,7 +1244,7 @@ end
 #     return reshape(pre, params.nz, params.nx, params.nt)
 # end
 
-# completely based on for loop 
+# completely based on for loop
 # function one_step_forward!(spt2::Snapshot{Tv}, spt1::Snapshot{Tv}, params::TdParams{Ti,Tv},
 #          fc::Vector{Tv}, tmp::Vector{Tv}, tmp_z1::Vector{Tv}, tmp_z2::Vector{Tv},
 #          tmp_x1::Vector{Tv}, tmp_x2::Vector{Tv}) where {Ti<:Int64, Tv<:AbstractFloat}

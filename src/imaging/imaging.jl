@@ -11,7 +11,8 @@ export add_virtual_source,
        apply_image_condition!,
        velocity_gradient,
 # # ==================== get reflections ==========
-       get_reflections
+       get_reflections,
+       get_wavefield_bound
 
 
 include("born_forward.jl")
