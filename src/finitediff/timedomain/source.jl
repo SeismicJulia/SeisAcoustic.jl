@@ -402,6 +402,18 @@ function time_range_multisources(srcs::Vector{Source})
     return tmin, tmax
 end
 
+function write_source(path_src::String, src::Source)
+
+    fid = open(path_src, "w")
+    if typeof(dt)
+    write(fid, src.isz)
+    write(fid, src.isx)
+    write(fid, src.src2spt)
+    write(fid, src.src2wfd)
+    write(fid, src.it_min)
+    write(fid, src.it_max)
+    
+end
 # ========================need to be updated ===================================
 # """
 #    randomly source starting time shift and make the starting time is the integer

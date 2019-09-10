@@ -12,7 +12,9 @@ export add_virtual_source,
        velocity_gradient,
 # # ==================== get reflections ==========
        get_reflections,
-       get_wavefield_bound
+       get_wavefield_bound,
+       get_born_forward,
+       get_born_adjoint
 
 
 include("born_forward.jl")

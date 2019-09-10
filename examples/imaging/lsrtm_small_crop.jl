@@ -44,24 +44,24 @@ params_homo = TdParams(rho1, vel1, free_surface, dz, dx, dt, tmax;
                        data_format=data_format, order=order);
 
 # a single source
-isz = 2; isx = 50;
-src = Source(isz, isx, params; amp=100000, fdom=20, type_flag="miniphase");
+# isz = 2; isx = 50;
+# src = Source(isz, isx, params; amp=100000, fdom=20, type_flag="miniphase");
 
 # vector of source
-# isx = collect(30:70:params.nx-30); isz = 2*ones(length(isx));
-# src = get_multi_sources(isz, isx, params; amp=100000, fdom=20, type_flag="miniphase");
+isx = collect(30:70:params.nx-30); isz = 2*ones(length(isx));
+src = get_multi_sources(isz, isx, params; amp=100000, fdom=20, type_flag="miniphase");
 
 # receiver location
-irx = collect(1:1:params.nx);
+irx = collect(1:2:params.nx);
 irz = 2 * ones(Int64, length(irx));
 
 # do simulation
-path_rec = joinpath(work_dir, "recordings")
-get_reflections(path_rec, irz, irx, src, params, params_homo)
+dir_obs = joinpath(work_dir, "data_space/observation")
+get_reflections(dir_obs, irz, irx, src, params, params_homo)
 
 # plotting the data
-refl = read_recordings(joinpath(path_rec, "reflections_4.bin"));
-SeisPlotTX(refl.p, dy=dt, cmap="gray", wbox=6, hbox=6);
+dobs = read_recordings(joinpath(dir_obs, "reflection_4.bin"));
+SeisPlotTX(dobs.p, dy=dt, cmap="gray", wbox=6, hbox=6);
 
 
 # ==============================================================================
@@ -113,10 +113,10 @@ params = TdParams(rho1, vel, free_surface, dz, dx, dt, tmax;
 isx = collect(30:70:params.nx-30); isz = 2*ones(length(isx));
 src = get_multi_sources(isz, isx, params; amp=100000, fdom=20, type_flag="miniphase");
 
-path_sourceside = joinpath(work_dir, "sourceside");
-get_wavefield_bound(path_sourceside, src, params);
+dir_sourceside = joinpath(work_dir, "sourceside");
+get_wavefield_bound(dir_sourceside, src, params; remove_flag=false);
 
-(hdr1, d1) = read_RSdata(joinpath(path_sourceside, "normalization.rsf"));
+(hdr1, d1) = read_RSdata(joinpath(dir_sourceside, "normalization.rsf"));
 SeisPlotTX(d1, dy=dt, cmap="rainbow", wbox=6, hbox=3);
 
 (h1, s1) = read_RSdata(joinpath(path_sourceside, "strength_1.rsf"));
@@ -124,3 +124,11 @@ SeisPlotTX(d1, dy=dt, cmap="rainbow", wbox=6, hbox=3);
 (h3, s3) = read_RSdata(joinpath(path_sourceside, "strength_3.rsf"));
 (h4, s4) = read_RSdata(joinpath(path_sourceside, "strength_4.rsf"));
 SeisPlotTX(s1, dy=dt, cmap="rainbow", wbox=6, hbox=3);
+SeisPlotTX(s1+s2, dy=dt, cmap="rainbow", wbox=6, hbox=3);
+SeisPlotTX(s1+s2+s3, dy=dt, cmap="rainbow", wbox=6, hbox=3);
+SeisPlotTX(s1+s2+s3+s4, dy=dt, cmap="rainbow", wbox=6, hbox=3);
+
+# apply the adjoint operator
+path_m = joinpath(work_dir, "model_space/m.rsf")
+dir_rec= joinpath(work_dir, "data_space/observation")
+dir_sourceside =
