@@ -405,15 +405,67 @@ end
 function write_source(path_src::String, src::Source)
 
     fid = open(path_src, "w")
-    if typeof(dt)
+
     write(fid, src.isz)
     write(fid, src.isx)
     write(fid, src.src2spt)
     write(fid, src.src2wfd)
     write(fid, src.it_min)
     write(fid, src.it_max)
-    
+
+    typeof(src.dt) == Float32 && write(fid, 1)
+    typeof(src.dt) == Float64 && write(fid, 2)
+
+    write(fid, src.dt)
+    write(fid, src.p )
+
+    close(fid)
+    return nothing
 end
+
+function read_source(path_src::String)
+
+    fid     = open(path_src, "r")
+    isz     = read(fid, Int64)
+    isx     = read(fid, Int64)
+    src2spt = read(fid, Int64)
+    src2wfd = read(fid, Int64)
+    it_min  = read(fid, Int64)
+    it_max  = read(fid, Int64)
+    nt      = it_max - it_min + 1
+    format_code = read(fid, Int64)
+
+    if format_code == 1
+       dt = read(fid, Float32)
+       p  = zeros(Float32, nt)
+       read!(fid, p)
+
+    elseif format_code == 2
+       dt = read(fid, Float64)
+       p  = zeros(Float64, nt)
+       read!(fid, p)
+
+    else
+       error("wrong data format")
+    end
+
+    return Source(isz, isx, src2spt, src2wfd, dt, it_min, it_max, p)
+end
+
+function isequal_tmp(src1::Source, src2::Source)
+
+    src1.isz     != src2.isz && (return false)
+    src1.isx     != src2.isx && (return false)
+    src1.src2spt != src2.src2spt && (return false)
+    src1.src2wfd != src2.src2wfd && (return false)
+    src1.it_min  != src2.it_min  && (return false)
+    src1.it_max  != src2.it_max  && (return false)
+    src1.dt      != src2.dt      && (return false)
+    norm(src1.p-src2.p)/norm(src1.p) > eps(eltype(src1.p)) && (return false)
+
+    return true
+end
+
 # ========================need to be updated ===================================
 # """
 #    randomly source starting time shift and make the starting time is the integer

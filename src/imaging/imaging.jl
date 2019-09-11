@@ -14,10 +14,14 @@ export add_virtual_source,
        get_reflections,
        get_wavefield_bound,
        get_born_forward,
-       get_born_adjoint
+       get_born_adjoint,
+# # ==================== filters for image ==========
+       laplace_filter
+
 
 
 include("born_forward.jl")
 include("born_adjoint.jl")
 include("velocity_gradient.jl")
 include("get_reflections.jl")
+include("filter.jl")
