@@ -30,7 +30,8 @@ export convert,
        write_RSheader,
        write_RSdata,
        read_RSheader,
-       read_RSdata
+       read_RSdata,
+       l2norm_rsf
 
 include("segy.jl")
 include("regular.jl")

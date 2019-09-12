@@ -306,7 +306,7 @@ end
    parallel forward born approximation for multiple shots.
 """
 function born_approximation_forward!(dir_born::Ts, path_m::Ts, irz::Ti, irx::Ti, dir_sourceside::Ts,
-                          fidiff::TdParams; location_flag="index", normalization_flag=true) where {Ts<:String, Ti<:Vector, T<:Union{Source, Vector{Source}}}
+                          fidiff::TdParams; location_flag="index", normalization_flag=true, mute_index::Int64=0) where {Ts<:String, Ti<:Vector, T<:Union{Source, Vector{Source}}}
 
     function wrap_born_forward(params::NamedTuple)
 
@@ -346,6 +346,12 @@ function born_approximation_forward!(dir_born::Ts, path_m::Ts, irz::Ti, irx::Ti,
        path_normalization = joinpath(dir_sourceside, "normalization.rsf")
        (hdr, scale) = read_RSdata(path_normalization)
        m .= vec(scale) .* m
+    end
+
+    if mute_index > 0
+       m  = reshape(m, fidiff.nz, fidiff.nx)
+       m[1:mute_index,:] .= 0.0
+       m  = vec(m) 
     end
 
     # prepare argument

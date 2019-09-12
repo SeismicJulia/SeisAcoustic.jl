@@ -3,7 +3,6 @@ using SeisPlot, SeisAcoustic
 # ==============================================================================
 #             read physical model
 dir_work = joinpath(homedir(), "Desktop/lsrtm");
-initialize_lsrtm(dir_work);
 
 path_rho = joinpath(dir_work, "physical_model/rho.rsf");
 path_vel = joinpath(dir_work, "physical_model/vel.rsf");
@@ -22,8 +21,8 @@ vel = model_smooth(vel, 10);
 rho1 = copy(rho); rho1 .= minimum(rho);
 vel1 = copy(vel); vel1 .= vel[1];
 
-SeisPlotTX(vel, hbox=1.5*2, wbox=3*2, cmap="rainbow", vmin=minimum(vel), vmax=maximum(vel));
-SeisPlotTX(rho, hbox=1.5*2, wbox=3*2, cmap="rainbow", vmin=minimum(rho), vmax=maximum(rho));
+# SeisPlotTX(vel, hbox=1.5*2, wbox=3*2, cmap="rainbow", vmin=minimum(vel), vmax=maximum(vel));
+# SeisPlotTX(rho, hbox=1.5*2, wbox=3*2, cmap="rainbow", vmin=minimum(rho), vmax=maximum(rho));
 
 # vertical and horizontal grid size
 dz = 6.25; dx = 6.25;
@@ -53,8 +52,8 @@ fidiff = TdParams(rho1, vel, free_surface, dz, dx, dt, tmax;
 # src = Source(isz, isx, params; amp=100000, fdom=20, type_flag="miniphase");
 
 # vector of source
-# isx = collect(10 : 15 : fidiff.nx-10); isz = 2*ones(length(isx)); 
-isx = collect(30 : 70 : fidiff.nx-30); isz = 2*ones(length(isx));
+isx = collect(10 : 15 : fidiff.nx-10); isz = 2*ones(length(isx));
+# isx = collect(30 : 70 : fidiff.nx-30); isz = 2*ones(length(isx));
 src = get_multi_sources(isz, isx, fidiff; amp=100000, fdom=20, type_flag="miniphase");
 
 # receiver location
@@ -70,13 +69,45 @@ get_wavefield_bound(dir_sourceside, src, fidiff);
 # dobs = read_recordings(joinpath(dir_obs, "recordings_4.bin"));
 # SeisPlotTX(dobs.p, dy=dt, cmap="gray", wbox=6, hbox=6);
 
-# parameters for born approximation
-born_params = (irz=irz, irx=irx, dir_sourceside=dir_sourceside, fidiff=fidiff);
+# lsrtm
+born_params = (irz=irz, irx=irx, dir_sourceside=dir_sourceside, fidiff=fidiff, normalization_flag=true, mute_index=10);
+(x, his) = cgls(born_approximation, dir_obs; dir_work=dir_work, op_params=born_params,
+                d_axpby=recordings_axpby!, m_axpby=image_axpby!, d_norm=recordings_norm, m_norm=l2norm_rsf);
+
+
+# check the result
+dir_work = joinpath(homedir(), "Desktop/lsrtm");
+path = joinpath(dir_work, "sourceside/normalization.rsf");
+(hdr, s) = read_RSdata(path);
+SeisPlotTX(rho, hbox=5, wbox=10, cmap="rainbow", vmin=minimum(rho), vmax=maximum(rho));
+
+
+path = joinpath(dir_work, "iterations/iteration_10.rsf");
+(hdr, m) = read_RSdata(path);
+
+p = m .* vec(s);
+p = reshape(p, 150, 301);
+p1 = laplace_filter(p);
+# SeisPlotTX(p, cmap="gray", wbox=10, hbox=5);
+SeisPlotTX(p1, cmap="gray", wbox=10, hbox=5);
+
+p2 = copy(rho)
+for i2 = 1 : size(p2,2)
+    for i1 = 1 : size(p2, 1)-1
+        p2[i1,i2] = (p2[i1+1,i2]-p2[i1,i2]) / (p2[i1+1,i2]+p2[i1,i2])
+    end
+end
+SeisPlotTX(p2, cmap="gray", wbox=10, hbox=5);
+
+
+
+
+
 
 # input and output for born approximation
-path_m1 = joinpath(dir_work, "model_space/image1.rsf");
-path_m2 = joinpath(dir_work, "model_space/image2.rsf");
-dir_d1  = joinpath(dir_work, "data_space/born_forward");
+path_m1 = joinpath(dir_work, "cgls_model_space/image1.rsf");
+path_m2 = joinpath(dir_work, "cgls_model_space/image2.rsf");
+dir_d1  = joinpath(dir_work, "cgls_data_space/born_forward");
 dir_d2  = dir_obs;
 
 image  = 1000.0 * randn(fidiff.data_format, fidiff.nz*fidiff.nx);
@@ -84,6 +115,7 @@ hdr    = RegularSampleHeader(image, title="random image");
 write_RSdata(path_m1, hdr, image);
 
 # apply operation
+born_params = (irz=irz, irx=irx, dir_sourceside=dir_sourceside, fidiff=fidiff, normalization_flag=true, mute_index=10);
 born_approximation(dir_d1, path_m1, 1; born_params...);
 born_approximation(path_m2, dir_d2, 2; born_params...);
 

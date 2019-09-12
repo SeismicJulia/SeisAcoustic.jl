@@ -1,16 +1,16 @@
 function born_approximation(output::Ts, input::Ts, iflag::Ti;
-         irz::Vector, irx::Vector, location_flag="index", dir_sourceside="NULL", normalization_flag=true, fidiff::TdParams) where {Ts<:String, Ti<:Int64}
+         irz::Vector, irx::Vector, location_flag="index", dir_sourceside="NULL", normalization_flag=true, mute_index=0, fidiff::TdParams) where {Ts<:String, Ti<:Int64}
 
     # clean the space
     rm(output, force=true, recursive=true)
 
     if iflag == 1
        born_approximation_forward!(output, input, irz, irx, dir_sourceside, fidiff;
-                                  location_flag=location_flag, normalization_flag=normalization_flag)
+                                  location_flag=location_flag, normalization_flag=normalization_flag, mute_index=mute_index)
 
     elseif iflag == 2
        born_approximation_adjoint(output, input, dir_sourceside, fidiff;
-                                  normalization_flag=normalization_flag)
+                                  normalization_flag=normalization_flag, mute_index=mute_index)
 
     else
        error("undefined operator behavior")
@@ -22,7 +22,7 @@ end
 """
    perform y = ax + by for multiple recordings
 """
-function recordings_axpby!(a, dir_x::Ts, b, dir_y::Ts) where {Tv<:Number, Ts<:String}
+function recordings_axpby!(a, dir_x::Ts, b, dir_y::Ts) where {Ts<:String}
 
     # determine number of files
     file_name = readdir(dir_x)
@@ -64,7 +64,7 @@ end
 """
    perform y = ax + by for variables in model space
 """
-function image_axpby!(a, path_x::Ts, b, path_y::Ts) where {Tv<:Number, Ts<:String}
+function image_axpby!(a, path_x::Ts, b, path_y::Ts) where {Ts<:String}
 
     (hdr1, x) = read_RSdata(path_x)
     (hdr2, y) = read_RSdata(path_y)
@@ -97,9 +97,4 @@ function recordings_norm(dir::Ts) where {Tv<:Number, Ts<:String}
     end
 
     return sqrt(r)
-end
-
-function image_norm(path::String)
-    (hdr, d) = read_RSdata(path)
-    return norm(d)
 end

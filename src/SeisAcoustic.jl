@@ -20,5 +20,6 @@ module SeisAcoustic
     include("finitediff/finitediff.jl")  # finite-difference method for acoustic wave equation
     include("imaging/imaging.jl")
     include("fwi/fwi.jl")
+    include("solver/solver.jl")
 
 end # module

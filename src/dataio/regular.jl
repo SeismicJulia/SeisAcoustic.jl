@@ -529,3 +529,8 @@ function read_RSdata(path::String)
 
     return hdr, data
 end
+
+function l2norm_rsf(path::String)
+    (hdr, d) = read_RSdata(path)
+    return norm(d)
+end

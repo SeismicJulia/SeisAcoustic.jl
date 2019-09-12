@@ -261,7 +261,7 @@ end
    the adjoint operator of born approximation
 """
 function born_approximation_adjoint(path_m::Ts, dir_rec::Ts, dir_sourceside::Ts, fidiff::TdParams;
-                          normalization_flag=true, remove_flag=true) where {Ts<:String, T<:Union{Source, Vector{Source}}}
+                          normalization_flag=true, remove_flag=true, mute_index::Int64=0) where {Ts<:String, T<:Union{Source, Vector{Source}}}
 
     function wrap_born_adjoint(params::NamedTuple)
 
@@ -355,6 +355,13 @@ function born_approximation_adjoint(path_m::Ts, dir_rec::Ts, dir_sourceside::Ts,
 
     # remove the temporary folder
     remove_flag && rm(dir_tmp, force=true, recursive=true)
+
+    # apply muting
+    if mute_index > 0
+       p  = reshape(p, fidiff.nz, fidiff.nx)
+       p[1:mute_index,:] .= 0.0
+       p  = vec(p) 
+    end
 
     # apply preconditioner to model parameter
     if normalization_flag
