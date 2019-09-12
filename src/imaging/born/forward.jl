@@ -301,3 +301,88 @@ function born_approximation_forward!(rec::Recordings, m::Vector{Tv}, path_bnd::T
 
     return nothing
 end
+
+"""
+   parallel forward born approximation for multiple shots.
+"""
+function born_approximation_forward!(dir_born::Ts, path_m::Ts, irz::Ti, irx::Ti, dir_sourceside::Ts,
+                          fidiff::TdParams; location_flag="index", normalization_flag=true) where {Ts<:String, Ti<:Vector, T<:Union{Source, Vector{Source}}}
+
+    function wrap_born_forward(params::NamedTuple)
+
+        # read source wavelet
+        src = read_source(params.path_src)
+        rec = Recordings(params.receiver_z, params.receiver_x, params.fidiff; location_flag=params.location_flag)
+
+        born_approximation_forward!(rec, params.m, params.path_bnd, src, params.fidiff)
+        write_recordings(params.path_born, rec)
+
+        return nothing
+    end
+
+    # create folder to save the result
+    if !isdir(dir_born)
+       mkdir(dir_born)
+       if !isdir(dir_born) # check the directory is created
+          error("can't create directory for forward born approximation")
+       end
+    end
+
+    dir_bnd = joinpath(dir_sourceside, "boundary")
+    dir_src = joinpath(dir_sourceside, "source")
+    isdir(dir_bnd) || error("boundary file doesn't exist")
+    isdir(dir_src) || error("source wavelet file doesn't exist")
+
+    # determine the number of shot
+    file_src = readdir(dir_src)
+    ns       = length(file_src)
+    if file_src[1] == ".DS_Store" # in case of MacOS
+       ns = ns - 1
+    end
+
+    # apply preconditioner to model parameter
+    (hdr, m) = read_RSdata(path_m)
+    if normalization_flag
+       path_normalization = joinpath(dir_sourceside, "normalization.rsf")
+       (hdr, scale) = read_RSdata(path_normalization)
+       m .= vec(scale) .* m
+    end
+
+    # prepare argument
+    argument_collection = Vector{NamedTuple}(undef, ns)
+    for i = 1 : ns
+
+        file_name = join(["recordings_" "$i" ".bin"])
+        path_born = joinpath(dir_born, file_name)
+
+        file_name = join(["boundary_" "$i" ".rsf"])
+        path_bnd  = joinpath(dir_bnd, file_name)
+
+        file_name = join(["source_" "$i" ".bin"])
+        path_src  = joinpath(dir_src, file_name)
+
+        # OBN acquisition geometry
+        if eltype(irz) <: Real
+           argument_collection[i] = (path_born=path_born, receiver_z=irz, receiver_x=irx, location_flag=location_flag, m=m,
+                                     path_bnd=path_bnd, path_src=path_src, fidiff=fidiff)
+
+        # towed streamer
+        elseif eltype(irz) <: Vector
+           argument_collection[i] = (path_born=path_born, receiver_z=irz[i], receiver_x=irx[i], location_flag=location_flag, m=m,
+                                     path_bnd=path_bnd, path_src=path_src, fidiff=fidiff)
+        else
+           error("wrong type receiver locations")
+        end
+    end
+
+    # do simulation parallel
+    if nprocs() == 1
+       for i = 1 : ns
+           wrap_born_forward(argument_collection[i])
+       end
+    else
+       pmap(wrap_born_forward, argument_collection)
+    end
+
+    return nothing
+end

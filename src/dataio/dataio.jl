@@ -25,6 +25,7 @@ export convert,
        read_one_shot,
 # ======Regular Sampled data format========================
        RegularSampleHeader,
+       zeros,
        field_location,
        write_RSheader,
        write_RSdata,

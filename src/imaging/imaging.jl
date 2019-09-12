@@ -3,25 +3,25 @@ export add_virtual_source,
        sourceside_reconstruct_forward,
        born_approximation_forward!,
 # # ==================== born adjoint ===============
+       apply_image_condition!,
        sourceside_reconstruct_backward,
        born_approximation_adjoint,
-# # ==================== velocity gradient ==========
-       get_residue,
-       get_sourceside_wavefield,
-       apply_image_condition!,
-       velocity_gradient,
-# # ==================== get reflections ==========
+# # ==================== born =======================
+       born_approximation,
+       recordings_axpby!,
+       image_axpby!,
+       recordings_norm,
+       image_norm,
+# # ==================== get reflections ============
        get_reflections,
        get_wavefield_bound,
-       get_born_forward,
-       get_born_adjoint,
+       initialize_lsrtm,
 # # ==================== filters for image ==========
        laplace_filter
 
 
-
-include("born_forward.jl")
-include("born_adjoint.jl")
-include("velocity_gradient.jl")
+include("born/forward.jl")
+include("born/adjoint.jl")
+include("born/born.jl")
 include("get_reflections.jl")
 include("filter.jl")

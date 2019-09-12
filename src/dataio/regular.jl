@@ -191,6 +191,35 @@ function RegularSampleHeader(d::Array{Tv}; n1=0, n2=1, n3=1, n4=1, n5=1, n6=1, n
 end
 
 """
+   construct data based on the header information
+"""
+function zeros(hdr::RegularSampleHeader)
+
+    # get the dimensions of data
+    if hdr.n9 > 1
+       return zeros(hdr.data_format, hdr.n1, hdr.n2, hdr.n3, hdr.n4, hdr.n5, hdr.n6, hdr.n7, hdr.n8, hdr.n9)
+    elseif hdr.n8 > 1
+       return zeros(hdr.data_format, hdr.n1, hdr.n2, hdr.n3, hdr.n4, hdr.n5, hdr.n6, hdr.n7, hdr.n8)
+    elseif hdr.n7 > 1
+       return zeros(hdr.data_format, hdr.n1, hdr.n2, hdr.n3, hdr.n4, hdr.n5, hdr.n6, hdr.n7)
+    elseif hdr.n6 > 1
+       return zeros(hdr.data_format, hdr.n1, hdr.n2, hdr.n3, hdr.n4, hdr.n5, hdr.n6)
+    elseif hdr.n5 > 1
+       return zeros(hdr.data_format, hdr.n1, hdr.n2, hdr.n3, hdr.n4, hdr.n5)
+    elseif hdr.n4 > 1
+       return zeros(hdr.data_format, hdr.n1, hdr.n2, hdr.n3, hdr.n4)
+    elseif hdr.n3 > 1
+       return zeros(hdr.data_format, hdr.n1, hdr.n2, hdr.n3)
+    elseif hdr.n2 > 1
+       return zeros(hdr.data_format, hdr.n1, hdr.n2)
+    elseif hdr.n1 > 1
+       return zeros(hdr.data_format, hdr.n1)
+    else
+       error("empty header")
+    end
+end
+
+"""
    overloading the show function for the header of regularly sampled data
 """
 function show(io::IO, hdr::RegularSampleHeader)

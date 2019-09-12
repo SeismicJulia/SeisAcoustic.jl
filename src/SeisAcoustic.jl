@@ -14,10 +14,11 @@ module SeisAcoustic
     const spmatveclib  = abspath(joinpath(splitdir(Base.source_path())[1],"..","deps","builds","spmatvec.so"))
 
     # overloading Base function
-    import Base.convert, Base.show, Base.isequal
+    import Base.convert, Base.show, Base.isequal, Base.zeros
 
     include("dataio/dataio.jl")          # read and write segy data, internally defined regular sampled data (borrow from rsf)
     include("finitediff/finitediff.jl")  # finite-difference method for acoustic wave equation
     include("imaging/imaging.jl")
+    include("fwi/fwi.jl")
 
 end # module

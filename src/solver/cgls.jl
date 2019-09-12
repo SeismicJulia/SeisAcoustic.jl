@@ -1,102 +1,82 @@
-function CGLS(A::Function, b::Ts; x0="NULL", path="NULL", params=[],
-         shift=0.0, tol=1e-6, maxIter=50, print_flag=false) where {Ts<:Union{String, Vector{String}}}
+function cgls(op::Function, b::Ts; op_params::NamedTuple, data_axpby::Function, model_axpby::Function,
+              data_norm::Function, model_norm::Function, x0="NULL", dir_work="NULL",
+              shift=0.0, tol=1e-6, maxIter=50, print_flag=false) where {Ts<:Union{String, Vector{String}}}
 
-    if path == "NULL"
-       path = pwd()
+    # determine the working directory
+    if dir_work == "NULL"
+       dir_work =  pwd()
     end
 
-    # create folder to save files of model size
-    path_model = joinpath(path, "model")
-    if !isdir(path_model)
-       mkdir(path_model)
-       if !isdir(path_model)
-          error("could not create directory")
-       end
+    # create directory for variables in model space
+    dir_model = joinpath(dir_work, "model_space")
+    rm(dir_model, force=true, recursive=true)
+    mkdir(dir_model)
+    if !isdir(dir_model)
+       error("could not create directory for variables in model space")
     end
-    x = join([path_model "/x.bin"])
-    s = join([path_model "/s.bin"])
-    p = join([path_model "/p.bin"])
+    x = joinpath(dir_model, "x.rsf")
+    s = joinpath(dir_model, "s.rsf")
+    p = joinpath(dir_model, "p.rsf")
 
-    # create folders to save residue
-    path_residue   = joinpath(path, "residue")
-    if !isdir(path_residue)
-       mkdir(path_residue)
-       if !isdir(path_residue)
-          error("could not create directory")
-       end
+    # create directory for variables in data space
+    dir_data = joinpath(dir_work, "data_space")
+    rm(dir_data, force=true, recursive=true)
+    mkdir(dir_data)
+    if !isdir(dir_data)
+       error("could not create directory for variables in data space")
     end
 
-    # create folders to save synthetic data with current model
-    path_forward = joinpath(path, "forward")
-    if !isdir(path_forward)
-       mkdir(path_forward)
-       if !isdir(path_forward)
-          error("could not create directory")
-       end
+    # create directory for residue
+    dir_residue = joinpath(dir_data, "residue")
+    mkdir(dir_residue)
+    if !isdir(dir_residue)
+       error("could not create directory of residue")
+    end
+
+    # create directory for the synthetic with current model
+    dir_forward = joinpath(dir_data, "forward")
+    mkdir(dir_forward)
+    if !isdir(dir_forward)
+       error("could not create directory of forward synthetic")
     end
 
     # intermidiate variables
-    if typeof(b) == String
-       r = join([path_residue "/res.bin"])
-       q = join([path_forward "/fwd.bin"])
-    elseif typeof(b) == Vector{String}
-       n = length(b)
-       r = Vector{String}(n)
-       q = Vector{String}(n)
-       for i = 1 : n
-           r[i] = join([path_residue "/res" "_" "$i" ".bin"])
-           q[i] = join([path_forward "/fwd" "_" "$i" ".bin"])
-       end
-    end
+    r = dir_residue
+    q = dir_forward
 
-    # provided initial guess
+    # initial guess provided
     if x0 != "NULL"
 
-       cp(x0, x, remove_destination=true)
-       dcal = A(x, 1; params=params)
-       x_plus_alpha_q!(r, b, -1.0, dcal)
+       cp(x0, x, force=true)
+       op(r, x, 1; op_params...)
+       data_axpby(1.0, b, -1.0, r)      # r = b - r
 
-       if typeof(params) <: Dict{Symbol, Any}
-          params[:path_m] = s
-       elseif typeof(params) == Vector{Dict}
-         for i = 1 : length(params)
-             params[i][:path_m] = s
-         end
-       end
-       s = A(r, 2; params=params)
-       x_plus_alpha_q!(s, -shift, x)
+       op(s, r, 2; op_params...)
+       model_axpby(-shift, x, 1.0, s)   # s = s - shift*x
 
-    # zero vector as initial guess
+    # no initial guess
     else
 
-       cp(b, r, remove_destination=true)
-       if typeof(params) <: Dict{Symbol, Any}
-          params[:path_m] = s
-       elseif typeof(params) == Vector{Dict}
-          for i = 1 : length(params)
-              params[i][:path_m] = s
-          end
-       end
-       s = A(r, 2; params=params)
+       cp(b, r, force=true)
+       op(s, r, 2; op_params...)
 
        # create x
-       (hdr, ds) = read_USdata(s)
-       tmp = zeros(ds)
-       write_USdata(x, hdr, tmp)
+       hdr = read_RSheader(s)
+       write_RSdata(x, hdr, zeros(hdr))
     end
 
     # compute residue
-    data_fitting = (norm(r))^2
+    data_fitting = (data_norm(r))^2
     constraint   = 0.0
-    cost0 = data_fitting + constraint
-    convergence = Float64[]; push!(convergence, 1.0);
+    cost0        = data_fitting + constraint
+    convergence  = Float64[]; push!(convergence, 1.0);
 
     # initialize some intermidiate vectors
-    cp(s, p, remove_destination=true)
+    cp(s, p, force=true)
 
-    norms0= norm(s)
+    norms0= model_norm(s)
     gamma = norms0^2
-    normx = norm(x)
+    normx = model_norm(x)
     xmax  = normx     # keep the initial one
     resNE = 1.0
 
@@ -113,52 +93,40 @@ function CGLS(A::Function, b::Ts; x0="NULL", path="NULL", params=[],
        @printf("%3.0f %20.10e %20.10e %20.10e %20.10e\n", k, data_fitting, constraint, normx, resNE);
     end
 
-    if typeof(params) <: Dict{Symbol, Any}
-       params[:path_fwd] = q
-    elseif typeof(params) == Vector{Dict}
-       for i = 1 : length(params)
-           params[i][:path_fwd] = q[i]
-       end
-    end
-
     while (k < maxIter) && run_flag
 
           k = k + 1
+          op(q, p, 1; op_params...)
 
-          q = A(p, 1; params=params)
-
-          delta = (norm(q))^2 + shift * (norm(p))^2
-          indefinite = delta <= 0 ? true : false
-          delta      = delta == 0.? eps(): delta
+          delta = (data_norm(q))^2 + shift * (model_norm(p))^2
+          indefinite = delta <= 0.0 ? true  : false
+          delta      = delta == 0.0 ? eps() : delta
 
           alpha = gamma / delta
 
-          x_plus_alpha_q!(x,  alpha, p)
-          x_plus_alpha_q!(r, -alpha, q)
+          model_axpby(alpha, p, 1.0, x)  # x = x + alpha * p
+          data_axpby(-alpha, q, 1.0, r)  # r = r - alpha * q
 
-          data_fitting = (norm(r))^2
-          constraint   = shift * (norm(x))^2
-          cost = data_fitting + constraint
+          data_fitting = (data_norm(r))^2
+          constraint   = shift * (model_norm(x))^2
+          cost         = data_fitting + constraint
 
           # save the intermidiate result
-          path_iter = join([path_model "/iteration" "_" "$k" ".bin"])
-          cp(x, path_iter, remove_destination=true)
+          path_iter = join([dir_model "/iteration" "_" "$k" ".rsf"])
+          cp(x, path_iter, force=true)
 
-          s = A(r, 2; params=params)
-          x_plus_alpha_q!(s, -shift, x)
+          op(s, r, 2; op_params...)
+          model_axpby(-shift, x, 1.0, s) # s = s - shift * x
 
-          norms  = norm(s)
+          norms  = model_norm(s)
           gamma0 = gamma
           gamma  = norms^2
           beta   = gamma / gamma0
 
-          (hdr, ds) = read_USdata(s)
-          (hdr, dp) = read_USdata(p)
-          dp = ds + beta * dp
-          write_USdata(p, hdr, dp)
+          model_axpby(1.0, s, beta, p)   # p = s + beta * p
 
           # check the stopping crietia
-          normx = norm(x)
+          normx = model_norm(x)
           xmax  = normx > xmax ? normx : xmax
           if norms <= norms0 * tol || normx * tol >= 1.0
              run_flag = false
@@ -173,116 +141,4 @@ function CGLS(A::Function, b::Ts; x0="NULL", path="NULL", params=[],
     end
 
     return x, convergence
-
-end
-
-
-function build_model_window(iz::Ti, hl::Ti, phi::PhysicalModel) where (Ti<:Int64)
-
-    if hl == 0
-       return ones(phi.data_format, phi.nz, phi.nx)
-    else
-       if iz < hl + 1
-          error("too small iz")
-       end
-
-       window = zeros(phi.data_format, phi.nz)
-       taper  = hanning(2*hl+1)
-       window[iz-hl:iz] = taper[1:hl+1]
-
-       scale = repmat(window, 1, phi.nx)
-       scale[iz+1:end,:] = one(phi.data_format)
-
-       return scale
-    end
-end
-
-"""
-   wrapper for forward born approximationa and write the recordings in standard
-uniform-sampled data format.
-"""
-function wrap_preconditioned_born_forward(par::Dict)
-
-    # current model parameter
-    (hdr, delta_lambda) = read_USdata(par[:path_m])
-    delta_lambda = vec(delta_lambda)
-
-    # apply the preconditioner
-    (hdr, scale) = read_USdata(par[:path_pre])
-    for i = 1 : length(delta_lambda)
-                         #pesudo hessian model windowing
-        delta_lambda[i] = scale[i] * par[:model_window][i] * delta_lambda[i]
-    end
-
-    # boundary of source-side wavefield and the last one
-    (bnd, wfd) = read_bound_wavefield(par[:path_bnd])
-
-    # Born forward modeling
-    rec = born_approximation_forward(par[:irz], par[:irx], delta_lambda, par[:fidMtx], par[:src], bnd, par[:fidMtxT], par[:phi])
-
-    # write the recording to hard drive
-    write_record(par[:path_fwd], rec, par[:phi])
-end
-
-"""
-  wrapper for the adjoint of born approximationa and write the image in standard
-uniform-sampled data format.
-"""
-function wrap_preconditioned_born_adjoint(par::Dict)
-
-    # receiver location
-    rec = read_record(par[:path_obs], par[:phi], 350, 50)
-
-    # boundary of source-side wavefield and the last one
-    (bnd, wfd) = read_bound_wavefield(par[:path_bnd])
-
-    # adjoint of Born approximation
-    delta_lambda = born_approximation_adjoint(rec, par[:fidMtx], par[:src], bnd, wfd, par[:fidMtxT], par[:phi])
-
-    # apply the adjoint of preconditioner
-    (hdr, scale) = read_USdata(par[:path_pre])
-    for i = 1 : length(delta_lambda)
-                         #model windowing       pesudo hessian
-        delta_lambda[i] = par[:model_window][i] * scale[i] * delta_lambda[i]
-    end
-    # write the recording to hard drive
-    write_image(par[:path_adj], delta_lambda, par[:phi])
-
-end
-
-function wrap_preconditioned_born_approximation(x::Ts, iflag::Ti; params=[]) where {Ts<:Union{String, Vector{String}}, Ti<:Int64}
-
-    # number of shot
-    ns = length(params)
-
-    # forward modeling operator
-    if iflag == 1
-
-       # change the path of current model
-       for i = 1 : ns
-           params[i][:path_m] = x
-       end
-
-       # the result are write to par[i][:path_fwd]
-       pmap(wrap_preconditioned_born_forward, params)
-
-       # return the path
-       d = Vector{String}(ns)
-       for i = 1 : ns
-           d[i] = params[i][:path_fwd]
-       end
-       return d
-
-    # adjoint operator
-    elseif iflag == 2
-
-       for i = 1 : ns
-           params[i][:path_obs] = x[i]
-       end
-       pmap(wrap_preconditioned_born_adjoint, params)
-       stack_image(params)
-
-       return params[1][:path_m]
-    end
-
 end

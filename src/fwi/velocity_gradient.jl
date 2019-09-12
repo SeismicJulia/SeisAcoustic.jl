@@ -187,25 +187,6 @@ function get_sourceside_wavefield(srcs::Vector{Source}, params::TdParams; iflag=
 end
 
 """
-   compute the source-side wave field as (p[it+1/2]-p[it-1/2]-f[it]) / k
-"""
-function apply_image_condition!(g::Vector{Tv}, spt::Snapshot, wfd1::Wavefield,
-         wfd2::Wavefield, params::TdParams) where {Tv <: AbstractFloat}
-
-    # number of elements
-    N = params.nz * params.nx
-
-    # update gradient by current adjoint snapshot
-    for i = 1 : N
-        dpdt = 2.0 * (wfd2.p[i] - wfd1.p[i]) / params.vel[i]
-        j    = params.spt2wfd[i]
-        g[i] = g[i] + dpdt * spt.px[j]
-    end
-
-    return nothing
-end
-
-"""
    compute the gradient of velocity model, the source-side wavefield is reconstructed from
 last wavefield and boundary value, the adjoint wavefield is obtained by backward propagating
 the residues.
