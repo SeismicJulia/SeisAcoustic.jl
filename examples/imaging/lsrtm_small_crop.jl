@@ -48,13 +48,13 @@ fidiff = TdParams(rho1, vel, free_surface, dz, dx, dt, tmax;
                   data_format=data_format, order=order);
 
 # a single source
-# isz = 2; isx = params.nx;
-# src = Source(isz, isx, params; amp=100000, fdom=20, type_flag="miniphase");
+isz = 2; isx = fidiff.nx;
+src = Source(isz, isx, fidiff; amp=100000, fdom=20, type_flag="miniphase");
 
 # vector of source
-isx = collect(10 : 15 : fidiff.nx-10); isz = 2*ones(length(isx));
-# isx = collect(30 : 70 : fidiff.nx-30); isz = 2*ones(length(isx));
-src = get_multi_sources(isz, isx, fidiff; amp=100000, fdom=20, type_flag="miniphase");
+# isx = collect(10 : 15 : fidiff.nx-10); isz = 2*ones(length(isx));
+# # isx = collect(30 : 70 : fidiff.nx-30); isz = 2*ones(length(isx));
+# src = get_multi_sources(isz, isx, fidiff; amp=100000, fdom=20, type_flag="miniphase");
 
 # receiver location
 irx = collect(1: 2 : fidiff.nx);
@@ -79,17 +79,19 @@ born_params = (irz=irz, irx=irx, dir_sourceside=dir_sourceside, fidiff=fidiff, n
 dir_work = joinpath(homedir(), "Desktop/lsrtm");
 path = joinpath(dir_work, "sourceside/normalization.rsf");
 (hdr, s) = read_RSdata(path);
-SeisPlotTX(rho, hbox=5, wbox=10, cmap="rainbow", vmin=minimum(rho), vmax=maximum(rho));
 
 
-path = joinpath(dir_work, "iterations/iteration_10.rsf");
+path = joinpath(dir_work, "iterations/iteration_50.rsf");
 (hdr, m) = read_RSdata(path);
-
 p = m .* vec(s);
 p = reshape(p, 150, 301);
-p1 = laplace_filter(p);
-# SeisPlotTX(p, cmap="gray", wbox=10, hbox=5);
+SeisPlotTX(p, cmap="gray", wbox=10, hbox=5);
+
+
+p1= laplace_filter(p);
 SeisPlotTX(p1, cmap="gray", wbox=10, hbox=5);
+
+
 
 p2 = copy(rho)
 for i2 = 1 : size(p2,2)
