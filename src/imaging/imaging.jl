@@ -12,6 +12,7 @@ export add_virtual_source,
        image_axpby!,
        recordings_norm,
 # # ==================== get reflections ============
+       get_observations,
        get_reflections,
        get_wavefield_bound,
        initialize_lsrtm,

@@ -1,4 +1,73 @@
 """
+   get the observations for multiple single source, parallel computation is implemented
+"""
+function get_observations(dir_obs::Ts, irz::Ti, irx::Ti, src::T, fidiff::P,
+                         location_flag="index") where {Ts<:String, Ti<:Vector, T<:Union{Source, Vector{Source}}, P<:TdParams}
+
+    # define function accept named tuple
+    function wrap_get_observations(params::NamedTuple)
+
+        # get whole observations
+        dobs = Recordings(params.receiver_z, params.receiver_x, params.fidiff_hete; location_flag=params.location_flag)
+
+        # do simulation
+        multi_step_forward!(dobs, params.source, params.fidiff)
+
+        # save the result to disk
+        write_recordings(params.path_obs, dobs)
+    end
+
+    # create a fold save observations
+    if isdir(dir_obs)
+       rm(dir_obs, force=true, recursive=true)
+    end
+    mkdir(dir_obs)
+    if !isdir(dir_obs)
+       error("can't create directory for reflections")
+    end
+
+    # determine number of shot
+    if typeof(src) <: Source
+       ns  = 1
+       src = [src]
+    else
+       ns = length(src)
+    end
+
+    # wrap parameters into vector of named tuple
+    argument_collection = Vector{NamedTuple}(undef, ns)
+    for i = 1 : ns
+
+        file_name = join(["recordings_" "$i" ".bin"])
+        path_obs  = joinpath(dir_obs, file_name)
+
+        # OBN acquisition geometry
+        if eltype(irz) <: Real
+           argument_collection[i] = (path_obs=path_obs, receiver_z=irz, receiver_x=irx, location_flag=location_flag,
+                                     source=src[i], fidiff=fidiff)
+
+        # towed streamer
+        elseif eltype(irz) <: Vector
+           argument_collection[i] = (path_obs=path_obs, receiver_z=irz[i], receiver_x=irx[i], location_flag=location_flag,
+                                     source=src[i], fidiff_hete=fidiff)
+        else
+           error("wrong type receiver locations")
+        end
+    end
+
+    # do simulation parallel
+    if nprocs() == 1
+       for i = 1 : ns
+           wrap_get_observations(argument_collection[i])
+       end
+    else
+       pmap(wrap_get_observations, argument_collection)
+    end
+
+    return nothing
+end
+
+"""
    get the reflections for multiple single source, parallel computation is implemented
 """
 function get_reflections(dir_obs::Ts, irz::Ti, irx::Ti, src::T, params_hete::P, params_homo::P;
