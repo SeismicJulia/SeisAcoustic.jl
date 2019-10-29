@@ -8,7 +8,7 @@ function get_observations(dir_obs::Ts, irz::Ti, irx::Ti, src::T, fidiff::P,
     function wrap_get_observations(params::NamedTuple)
 
         # get whole observations
-        dobs = Recordings(params.receiver_z, params.receiver_x, params.fidiff_hete; location_flag=params.location_flag)
+        dobs = Recordings(params.receiver_z, params.receiver_x, params.fidiff; location_flag=params.location_flag)
 
         # do simulation
         multi_step_forward!(dobs, params.source, params.fidiff)
@@ -49,7 +49,7 @@ function get_observations(dir_obs::Ts, irz::Ti, irx::Ti, src::T, fidiff::P,
         # towed streamer
         elseif eltype(irz) <: Vector
            argument_collection[i] = (path_obs=path_obs, receiver_z=irz[i], receiver_x=irx[i], location_flag=location_flag,
-                                     source=src[i], fidiff_hete=fidiff)
+                                     source=src[i], fidiff=fidiff)
         else
            error("wrong type receiver locations")
         end

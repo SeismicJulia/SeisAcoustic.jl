@@ -286,13 +286,13 @@ end
 #                           PGS data
 # ==============================================================================
 using PyPlot, SeisPlot, SeisAcoustic
-dir_work = joinpath(homedir(), "Desktop/PGS_rsf");
+dir_work = joinpath(homedir(), "Desktop/PGS/PGS_data_binary");
 
-path_shots   = joinpath(dir_work, "data.rsf");
+path_shots   = joinpath(dir_work, "data_Float64.rsf");
 (hdr, shots) = read_RSdata(path_shots);
 
-path_time    = joinpath(dir_work, "shooting_time.rsf");
-(hdr, tau)  = read_RSdata(path_time);
+path_time    = joinpath(dir_work, "time_shift_Float64.rsf");
+(hdr, tau)   = read_RSdata(path_time);
 
 # get the source wavelet
 channel_idx = 41;
@@ -312,7 +312,6 @@ xlabel("Time (S)"); ylabel("Amplitude");
 figure(); plot(fw, aw, label="wavelet"); plot(fd, ad, label="shot gather");
 xlabel("Frequency (Hz)"); ylabel("Relative amplitude");
 legend();
-
 
 
 # plot common shot gather
@@ -364,67 +363,34 @@ x     = 0.0 : dt  : (n1-1)*dt;
 x1    = 0.0 : dt1 : (n2-1)*dt1;
 plot(x, d[1:n1]); plot(x1, d1[1:n2]);
 
-##
-function trace_interpolation(d::Array{Tv}, order::Ti) where {Tv<:AbstractFloat, Ti<:Int64}
 
-       Ndims = ndims(d)
-       Ndims == 1 ? nx = 1 :  nx = prod(size(d)[2:Ndims])
-       dims = size(d)
-       N = dims[1]
-       Npad = order*N
-       nf = 2*Npad
-       nw = convert(Int,floor(nf/2)) + 1
-       di = zeros(eltype(d),nf,dims[2:end]...)
 
-       for k = 1:nx
 
-       dd = zeros(eltype(d),nf)
-       dd[1:order:Npad] = d[1:1:end,k]
-       D = fft(dd)
-       nyq = convert(Int,floor(nw/order)) + 1
-       for iw = nyq : nw
-               D[iw] *= 0
-       end
-       # symmetries
-       for iw=nw+1:nf
-               D[iw] = conj(D[nf-iw+2])
-       end
-       di[:,k] = real(ifft(D,1))
-       end
 
-       return  reshape(di[1:Npad,:]*order,Npad,dims[2:end]...)
+
+# random time dithering for the second source used when artificailly blending
+ot = 1.75 * rand(ns);
+for i = 1 : ns
+    ot[i] = round(Int64, ot[i]/dt) * dt
 end
 
 
+# source term
+isz = 3; isx=2;
+src = Source(isz, isx, fidiff; p=w);
 
-# ==============================================================================
-#                          generate synthetic data
-# ==============================================================================
-dir_work = joinpath(homedir(), "Desktop/PGS_rsf/Marmousi2");
+# receiver
+irx = collect(2:4:nx); irz = 4*ones(Int64, length(irx));
+rec = Recordings(irz, irx, fidiff);
+@time multi_step_forward!(rec, src, fidiff; print_flag=true);
+SeisPlotTX(rec.p, wbox=10, hbox=10, cmap="gray", pclip=90);
 
-path_vp  = joinpath(dir_work, "vp.segy");
-path_vs  = joinpath(dir_work, "vs.segy");
-path_rho = joinpath(dir_work, "rho.segy");
-
-(thdr, file_header, trace_header, vp) = read_segy_file(path_vp);
-(thdr, file_header, trace_header, vs) = read_segy_file(path_vs);
-(thdr, file_header, trace_header, rho) = read_segy_file(path_rho);
-
-hdr_vp  = RegularSampleHeader(vp, d1=1.25, d2=1.25);
-hdr_vs  = RegularSampleHeader(vs, d1=1.25, d2=1.25);
-hdr_rho = RegularSampleHeader(rho, d1=1.25, d2=1.25);
-
-path_vp  = joinpath(dir_work, "vp.rsf");
-path_vs  = joinpath(dir_work, "vs.rsf");
-path_rho = joinpath(dir_work, "rho.rsf");
-write_RSdata(path_vp, hdr_vp, vp);
-write_RSdata(path_vs, hdr_vs, vs);
-write_RSdata(path_rho, hdr_rho, rho);
+#
+SeisPlotTX(vp, wbox=6.8, hbox=1.4, cmap="rainbow", vmin=minimum(vp), vmax=maximum(vp)); tight_layout();
 
 SeisPlotTX(vp, wbox=13.6, hbox=2.8, cmap="rainbow", vmin=minimum(vp), vmax=maximum(vp),
            dx=0.00125, dy=0.00125, xticks=2:2:16, yticks=0.5:0.5:3.0, ticksize=20,
            ylabel="Z (km)", labelsize=20); tight_layout();
-
 
 
 

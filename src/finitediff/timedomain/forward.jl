@@ -163,7 +163,8 @@ save_type="wavefield": vz, vx, pz+px  without PML part,
 save_type="pressure" : p=pz+px without PML bounary part.
 """
 function multi_step_forward!(rec::Recordings, src::Source, params::TdParams;
-                             path_spt="NULL", path_wfd="NULL", path_pre="NULL", interval=1)
+                             path_spt="NULL", path_wfd="NULL", path_pre="NULL",
+                             print_flag=false, interval=200)
 
     # initialize some variables
     spt1 = Snapshot(params)
@@ -211,6 +212,13 @@ function multi_step_forward!(rec::Recordings, src::Source, params::TdParams;
            path_spt != "NULL" && append_one_snapshot(fid_spt, spt2)
            path_wfd != "NULL" && append_one_wavefield(fid_wfd, spt2, params)
            path_pre != "NULL" && append_one_pressure(fid_pre, spt2, params)
+        end
+
+        # verbose
+        if print_flag
+           if mod(it-1, interval) == 0
+              println("finished $it steps")
+           end
         end
 
         # prepare for next time stepping

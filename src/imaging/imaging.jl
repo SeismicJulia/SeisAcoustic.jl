@@ -17,11 +17,13 @@ export add_virtual_source,
        get_wavefield_bound,
        initialize_lsrtm,
 # # ==================== filters for image ==========
-       laplace_filter
+       laplace_filter,
+       trace_interpolation
 
 
 include("born/forward.jl")
 include("born/adjoint.jl")
 include("born/born.jl")
-include("get_reflections.jl")
+include("get_recordings.jl")
 include("filter.jl")
+include("upsampling.jl")
