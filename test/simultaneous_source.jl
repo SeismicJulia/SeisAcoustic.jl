@@ -258,7 +258,7 @@ path_comb2 = joinpath(dir_work, "simultaneous_source/boat2_comb.rsf");
 (hdr, c2)  = read_RSdata(path_comb2);
 index_set = [60, 120, 180];
 for i in index_set
-    SeisPlotTX(c2[:,i,:], hbox=3.38*2.5, wbox=5, pclip=95, cmap="gray",
+    SeisPlotTX(c2[:,i,:], hbox=5.6, wbox=4.4, pclip=95, cmap="gray",
                dx=1, dy=0.001, xticks=[], yticks=[]); tight_layout();
     path_fig = join([dir_work "/figure/boat2_crg_" "$i" ".pdf"]);
     savefig(path_fig, dpi=100); close();
@@ -270,7 +270,7 @@ path_cube = joinpath(dir_work, "conventional_survey/cube.rsf");
 index_set = [60, 120, 180];
 for i in index_set
     tmp = c[:,i,101:200]
-    SeisPlotTX(tmp, hbox=5.5, wbox=4.4, pclip=95, cmap="gray",
+    SeisPlotTX(tmp, hbox=5.6, wbox=4.4, pclip=95, cmap="gray",
                dx=1, dy=0.001, xticks=[], yticks=[]); tight_layout();
     path_fig = join([dir_work "/figure/boat2_crg_clean_" "$i" ".pdf"]);
     savefig(path_fig, dpi=100); close();
@@ -282,132 +282,155 @@ for i in index_set
     savefig(path_fig, dpi=100); close();
 end
 
+# ==============================================================================
+#                           PGS data
+# ==============================================================================
+using PyPlot, SeisPlot, SeisAcoustic
+dir_work = joinpath(homedir(), "Desktop/PGS_rsf");
 
-# ns_half = floor(Int64, ns/2);
-# d = zeros(Float32, fidiff.nt, ns_half);
-# for i = 1 : 100
-#     tmp = isx[i]
-#     path_rec = join([dir_work "/shot_" "$tmp" ".rec"]);
-#     rec = read_recordings(path_rec)
-#     d[:,i] .= rec.p[:,60]
-# end
+path_shots   = joinpath(dir_work, "data.rsf");
+(hdr, shots) = read_RSdata(path_shots);
 
+path_time    = joinpath(dir_work, "shooting_time.rsf");
+(hdr, tau)  = read_RSdata(path_time);
 
+# get the source wavelet
+channel_idx = 41;
+SeisPlotTX(shots[:,channel_idx,:], hbox=10, wbox=8, pclip=90, cmap="gray",
+           dx=1, dy=0.016, xticks=1:50:256, yticks=3:3:18, ticksize=20); tight_layout();
 
-
-SeisPlotTX(d, hbox=3.38*2.5, wbox=5, pclip=95, cmap="gray",
-           dx=1, dy=0.001, xticks=[], yticks=1:1:3, ticksize=25,
-           ylabel="Time (S)", labelsize=25); tight_layout();
-path_fig = join([dir_work "/clean_crg.pdf"]);
-savefig(path_fig, dpi=100); close();
-
-
-
-
-
-
-
-
-ns_half = floor(Int64, ns/2);
-rec_length = 3.5
-ot1 = collect(0.0 : rec_length : rec_length*(ns_half-1));
-
-tau = 2.0 * rand(ns_half);
-ot2 = ot1 + tau;
-ot  = vcat(ot1, ot2);
-
-# save firing time
-hdr = RegularSampleHeader(ot);
-path_ot = joinpath(dir_work, "fire_time.rsf");
-write_RSdata(path_ot, hdr, ot);
+d = shots[1:100,51,85:145];
+SeisPlotTX(d, hbox=10, wbox=8, pclip=99, cmap="gray",
+           dx=1, dy=0.016); tight_layout();
+wlet = sum(d, dims=2);
+wlet = wlet[33:end];
+taper= hanning(35*2+1); taper=taper[36:end]; wlet[33:end] .= wlet[33:end] .* taper;
+figure(); plot(0.0:0.016:(length(wlet)-1)*0.016, wlet);
+xlabel("Time (S)"); ylabel("Amplitude");
+(fw, aw) = amplitude_spectra(wlet, 0.016); aw .= aw / maximum(aw);
+(fd, ad) = amplitude_spectra(shots[:,:,1], 0.016); ad .= ad / maximum(ad);
+figure(); plot(fw, aw, label="wavelet"); plot(fd, ad, label="shot gather");
+xlabel("Frequency (Hz)"); ylabel("Relative amplitude");
+legend();
 
 
 
-irx = collect(1:2:nx); nr = length(irx);
-irz = 2 * ones(length(irx));
-rec = Recordings(irz, irx, fidiff);
-multi_step_forward!(rec, srcs, fidiff; interval=10000);
+# plot common shot gather
+shot_idx = 27;
+SeisPlotTX(shots[:,:,shot_idx], hbox=10, wbox=8, pclip=90, cmap="gray",
+           dx=1, dy=0.016, xticks=1:50:256, yticks=3:3:18, ticksize=20); tight_layout();
 
-path_rec = join([dir_work "/blended_shot" ".rec"]);
-write_recordings(path_rec, rec);
+# first arrival;
+shot_idx = 75;
+SeisPlotTX(shots[1:200,:,shot_idx], hbox=10, wbox=8, pclip=60, cmap="gray",
+           ox=1, dx=1, oy=0.0, dy=0.016, xticks=1:50:256, yticks=0.0:0.5:3.0, ticksize=20); tight_layout();
 
-for i = 1 : 4
-    i1 = (i-1)*100*1000 + 1
-    i2 = i1 + 10000
-    ot = (i1-1)*0.001
-    SeisPlotTX(rec.p[i1:i2,:], hbox=3.38*2.5, wbox=5, pclip=95, cmap="gray",
-               dx=1, oy=(i1-1)*0.001, dy=0.001, xticks=[], yticks=ot:2:ot+10, ticksize=25,
-               ylabel="Time (S)", labelsize=25); tight_layout();
-    path_fig = join([dir_work "/blended_slice_" "$i" ".pdf"]);
-    savefig(path_fig, dpi=100); close();
+dx = 12.5
+x = 150 : dx : 150+dx*255;
+y = x / 1500
+x1=collect(1:256);
+plot(x1, y, "r");
+
+
+
+d = shots[:,:,1];
+d1    = trace_interpolation(d, 4);
+d2    = trace_interpolation(d, 16);
+SeisPlotTX(d, hbox=10, wbox=8, pclip=90, cmap="gray",
+           dx=1, dy=0.016, xticks=1:50:256, yticks=3:3:18, ticksize=20); tight_layout();
+
+SeisPlotTX(d1, hbox=10, wbox=8, pclip=90, cmap="gray",
+           dx=1, dy=0.004, xticks=1:50:256, yticks=3:3:18, ticksize=20); tight_layout();
+
+SeisPlotTX(d2, hbox=10, wbox=8, pclip=90, cmap="gray",
+           dx=1, dy=0.001, xticks=1:50:256, yticks=3:3:18, ticksize=20); tight_layout();
+
+function apply_time_shift(d::Matrix{Tv}, dt, tau) where {Tv<:AbstractFloat}
+
+    (n1, n2) = size(d)
+    fd       = fft(d, 1)
+
+    dw = 1/dt / n1
+    nw = floor(Int64, n1/2)+1
+
+
+
 end
 
-i1 = 1
-i2 = i1 + 15500
-ot = (i1-1)*0.001
-tu = (i2-1)*0.001
-tmp = rec.p[i1:i2,:]; tmp = permutedims(tmp, [2,1]);
-SeisPlotTX(tmp, wbox=3.38*3.5, hbox=3, pclip=95, cmap="gray",
-           dy=1, ox=(i1-1)*0.001, dx=0.001, xticks=ot:3:tu, yticks=[], ticksize=25); tight_layout();
-path_fig = join([dir_work "/blended_start.pdf"]);
-savefig(path_fig, dpi=100); close();
+n1    = 100;
+n2    = n1 * order;
+dt    = 0.016; dt1 = dt / order;
+x     = 0.0 : dt  : (n1-1)*dt;
+x1    = 0.0 : dt1 : (n2-1)*dt1;
+plot(x, d[1:n1]); plot(x1, d1[1:n2]);
 
-i1 = 336501
-i2 = i1 + 15500
-ot = (i1-1)*0.001
-tu = (i2-1)*0.001
-tmp = rec.p[i1:i2,:]; tmp = permutedims(tmp, [2,1]);
-SeisPlotTX(tmp, wbox=3.38*3.5, hbox=3, pclip=95, cmap="gray",
-           dy=1, ox=(i1-1)*0.001, dx=0.001, xticks=ot:3:tu, yticks=[], ticksize=25); tight_layout();
-path_fig = join([dir_work "/blended_end.pdf"]);
-savefig(path_fig, dpi=100); close();
+##
+function trace_interpolation(d::Array{Tv}, order::Ti) where {Tv<:AbstractFloat, Ti<:Int64}
 
+       Ndims = ndims(d)
+       Ndims == 1 ? nx = 1 :  nx = prod(size(d)[2:Ndims])
+       dims = size(d)
+       N = dims[1]
+       Npad = order*N
+       nf = 2*Npad
+       nw = convert(Int,floor(nf/2)) + 1
+       di = zeros(eltype(d),nf,dims[2:end]...)
 
+       for k = 1:nx
 
-path="/Users/wenlei/Desktop/c1.bin"; fid=open(path,"w"); write(fid,convert(Vector{Float32}, vec(c1))); close(fid);
-pscube < /Users/wenlei/Desktop/c1.bin size1=6 size2=4 size3=2 labelsize=25 n1=3501 d1=0.001 d1num=1.0 f1num=1.0 label1="Time (s)" n2=200 d2num=50 f2num=50 label2="Receiver" n3=100 d3num=30 f3num=30 label3="shot" xbox=0.5 ybox=0.5 perc=0.98 > /Users/wenlei/Desktop/c1.eps
+       dd = zeros(eltype(d),nf)
+       dd[1:order:Npad] = d[1:1:end,k]
+       D = fft(dd)
+       nyq = convert(Int,floor(nw/order)) + 1
+       for iw = nyq : nw
+               D[iw] *= 0
+       end
+       # symmetries
+       for iw=nw+1:nf
+               D[iw] = conj(D[nf-iw+2])
+       end
+       di[:,k] = real(ifft(D,1))
+       end
 
-hdr = RegularSampleHeader(c1);
-path_c1 = joinpath(dir_work, "boat1_comb.rsf");
-write_RSdata(path_c1, hdr, c1);
-
-
-SeisPlotTX(c1[:,j,:], hbox=3.38*2.5, wbox=5, pclip=95, cmap="gray",
-           dx=1, dy=0.001, xticks=[], yticks=1:1:3, ticksize=25,
-           ylabel="Time (S)", labelsize=25, title="Reciever 180", titlesize=25); tight_layout();
-path_fig = join([dir_work "/crg_" "$j" ".pdf"]);
-savefig(path_fig, dpi=100); close();
-
-# comb for the boat2
-c2 = zeros(fidiff.data_format, floor(Int64,rec_length/dt)+1, nr, ns_half);
-for i = 1 : ns_half
-    tl = ot[i+ns_half]; tu = ot[i+ns_half]+rec_length
-    i1 = floor(Int64, tl/dt)+1
-    i2 = floor(Int64, tu/dt)+1
-    c2[:,:,i] .= rec.p[i1:i2, :]
+       return  reshape(di[1:Npad,:]*order,Npad,dims[2:end]...)
 end
 
-SeisPlotTX(c2[:,j,:], hbox=3.38*2.5, wbox=5, pclip=95, cmap="gray",
-           dx=1, dy=0.001, xticks=[], yticks=1:1:3, ticksize=25,
-           ylabel="Time (S)", labelsize=25, title="Reciever 5", titlesize=25); tight_layout();
-path_fig = join([dir_work "/crg2_" "$j" ".pdf"]);
-savefig(path_fig, dpi=100); close();
-
-path="/Users/wenlei/Desktop/c2.bin"; fid=open(path,"w"); write(fid,convert(Vector{Float32}, vec(c2))); close(fid);
-pscube < /Users/wenlei/Desktop/c2.bin size1=6 size2=4 size3=2 labelsize=25 n1=3501 d1=0.001 d1num=1.0 f1num=1.0 label1="Time (s)" n2=200 d2num=50 f2num=50 label2="Receiver" n3=100 d3num=30 f3num=30 label3="shot" xbox=0.5 ybox=0.5 perc=0.98 > /Users/wenlei/Desktop/c2.eps
 
 
-hdr = RegularSampleHeader(c2);
-path_c2 = joinpath(dir_work, "boat2_comb.rsf");
-write_RSdata(path_c2, hdr, c2);
+# ==============================================================================
+#                          generate synthetic data
+# ==============================================================================
+dir_work = joinpath(homedir(), "Desktop/PGS_rsf/Marmousi2");
 
-j = 100
-SeisPlotTX(c2[:,j,:], hbox=3.38*2.5, wbox=5, pclip=95, cmap="gray",
-           dx=1, dy=0.001, xticks=[], yticks=1:1:3, ticksize=25,
-           ylabel="Time (S)", labelsize=25); tight_layout();
+path_vp  = joinpath(dir_work, "vp.segy");
+path_vs  = joinpath(dir_work, "vs.segy");
+path_rho = joinpath(dir_work, "rho.segy");
+
+(thdr, file_header, trace_header, vp) = read_segy_file(path_vp);
+(thdr, file_header, trace_header, vs) = read_segy_file(path_vs);
+(thdr, file_header, trace_header, rho) = read_segy_file(path_rho);
+
+hdr_vp  = RegularSampleHeader(vp, d1=1.25, d2=1.25);
+hdr_vs  = RegularSampleHeader(vs, d1=1.25, d2=1.25);
+hdr_rho = RegularSampleHeader(rho, d1=1.25, d2=1.25);
+
+path_vp  = joinpath(dir_work, "vp.rsf");
+path_vs  = joinpath(dir_work, "vs.rsf");
+path_rho = joinpath(dir_work, "rho.rsf");
+write_RSdata(path_vp, hdr_vp, vp);
+write_RSdata(path_vs, hdr_vs, vs);
+write_RSdata(path_rho, hdr_rho, rho);
+
+SeisPlotTX(vp, wbox=13.6, hbox=2.8, cmap="rainbow", vmin=minimum(vp), vmax=maximum(vp),
+           dx=0.00125, dy=0.00125, xticks=2:2:16, yticks=0.5:0.5:3.0, ticksize=20,
+           ylabel="Z (km)", labelsize=20); tight_layout();
 
 
-# make animation
-# (hdr, d) = read_RSdata(path_wfd);
-# path_ani = joinpath(dir_work, "wavefield/animation_100");
-# SeisAnimation(path_ani, d; wbox=4.13, hbox=3.38, cmap="gray", vmin=-10, vmax=10, xticks=[], yticks=[], interval=20);
+
+
+
+
+
+
+
+#
