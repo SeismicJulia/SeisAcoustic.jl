@@ -284,9 +284,18 @@ path_wlet = joinpath(dir_model, "wavelet_16ms.rsf");
 wlet        = trace_interpolation(wlet[8:end], 20);
 
 # reduced physical model
-vel = vel[1:1500, 700:end-700];
-rho = rho[1:1500, 700:end-700];
+# vel = vel[1:1500, 700:end-700];
+# rho = rho[1:1500, 700:end-700];
+vel = vel[1:50, 700:end-700];
+rho = rho[1:50, 700:end-700];
 (nz, nx) = size(vel);
+for i2 = 1 : nx
+    for i1 = 1 : nz
+        if vel[i1,i2] > 4510
+           vel[i1,i2] = 4510
+        end
+    end
+end
 
 # top boundary condition
 free_surface = true;
@@ -295,15 +304,17 @@ free_surface = true;
 dz = 6.25; dx = 6.25;
 
 # time step size and maximum modelling length
-dt = 0.0008; tmax = 16.0;
+dt = 0.0008; tmax = 1.4;
 
-# precision
-data_format = Float32;
-order       = 2;
+# # organize these parameters into a structure
+# fidiff = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
+#                   data_format=Float32, order=2);
 
-# organize these parameters into a structure
-fidiff = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
-                  data_format=data_format, order=order);
+# src = Source(3, 200, fidiff; p=wlet);
+# irx = collect(1:nx);
+# irz = 3*ones(length(irx));
+# rec = Recordings(irz, irx, fidiff);
+# multi_step_forward!(rec, src, fidiff);
 
 # towed streamer
 nr = 481; delta_r = 12.5; near_offset = 150.0;
@@ -328,6 +339,11 @@ for i = 1 : ns
     isz_far[i]  = 3
 end
 
+
+dir_obs = joinpath(dir_work, "near_boat");
+get_shotgather(dir_obs, isz_near[1:2], isx_near[1:2], wlet, irz[1:2], irx[1:2], vel, rho, dz, dx, dt, tmax,
+                 location_flag="index",  data_format=Float64, order=2, free_surface=true, npad=100)
+
 # # # near offset source
 srcs    = get_multi_sources(isz_near, isx_near, fidiff; p=wlet);
 dir_obs = joinpath(dir_work, "near_boat");
@@ -340,7 +356,17 @@ get_observations(dir_obs, irz, irx, srcs, fidiff);
 
 
 
+# ===============================================================================
+#          plotting
+# ===============================================================================
+dir_work = joinpath(homedir(), "Desktop/BP");
+dir_near = joinpath(dir_work, "near_boat");
 
+idx      = 1
+path_rec = join([dir_near "/recordings_" "$idx" ".bin"]);
+rec      = read_recordings(path_rec);
+
+SeisPlot(rec.p)
 
 
 # ==============================================================================

@@ -1,4 +1,105 @@
 """
+   get the observations for multiple single source, parallel computation is implemented,
+the size of velocity model is changed according to the acquisition geometry
+"""
+function get_shotgather(dir_obs::Ts, isz, isx, wlet, irz::Ti, irx::Ti,
+                        vel::Matrix{Tv}, rho::Matrix{Tv},  dz, dx, dt, tmax;
+                        location_flag="index",  data_format=Float32, order=2, free_surface=true, npad=100) where {Ts<:String, Ti<:Vector, Tv<:Real}
+
+    # get the original model size
+    (nz, nx) = size(vel)
+    (nz, nx) == size(rho) || error("model size doesn't match")
+
+    # define function accept named tuple
+    function wrap_get_shotgather(params::NamedTuple)
+
+        # determine model range in spatial direction
+        # lower end
+        ix_lower = minimum(vcat(params.source_x, params.receiver_x))
+        if ix_lower > params.npad
+           ix_lower = ix_lower - params.npad
+        else
+           ix_lower = 1
+        end
+        # upper end
+        ix_upper = maximum(vcat(params.source_x, params.receiver_x))
+        if ix_upper + params.npad > nx
+           ix_upper = nx
+        else
+           ix_upper = ix_upper + params.npad
+        end
+
+        # grab part of velocity model (crop only in horizontal direction)
+        vel = params.vel[:, ix_lower:ix_upper]
+        rho = params.rho[:, ix_lower:ix_upper]
+        fidiff = TdParams(rho, vel, params.free_surface, params.dz, params.dx, params.dt, params.tmax;
+                          data_format=params.data_format, order=params.order)
+
+        # adjust receiver's location
+        receiver_x = copy(params.receiver_x)
+        for i = 1 : length(receiver_x)
+            receiver_x[i] = receiver_x[i] - ix_lower + 1
+        end
+        dobs = Recordings(params.receiver_z, receiver_x, fidiff; location_flag=params.location_flag)
+
+        # adjust source's location
+        source_x = params.source_x - ix_lower + 1
+        src = Source(params.source_z, source_x, fidiff; p=params.wlet)
+
+        # do simulation
+        multi_step_forward!(dobs, src, fidiff)
+
+        # save the result to disk
+        write_recordings(params.path_obs, dobs)
+    end
+
+    # create a fold save observations
+    if isdir(dir_obs)
+       rm(dir_obs, force=true, recursive=true)
+    end
+    mkdir(dir_obs)
+    if !isdir(dir_obs)
+       error("can't create directory for reflections")
+    end
+
+    # determine number of shot
+    ns =  length(isx)
+    ns == length(isz) || error("source coordinate doesn't match")
+
+    # wrap parameters into vector of named tuple
+    argument_collection = Vector{NamedTuple}(undef, ns)
+    for i = 1 : ns
+
+        file_name = join(["recordings_" "$i" ".bin"])
+        path_obs  = joinpath(dir_obs, file_name)
+
+        # OBN acquisition geometry
+        if eltype(irz) <: Real
+           argument_collection[i] = (path_obs=path_obs, receiver_z=irz, receiver_x=irx, location_flag=location_flag, source_z=isz[i], source_x=isx[i], wlet=wlet,
+                                     free_surface=free_surface, dz=dz, dx=dx, dt=dt, tmax=tmax, data_format=data_format, order=order, vel=vel, rho=rho, npad=npad)
+
+        # towed streamer
+        elseif eltype(irz) <: Vector
+           argument_collection[i] = (path_obs=path_obs, receiver_z=irz[i], receiver_x=irx[i], location_flag=location_flag, source_z=isz[i], source_x=isx[i], wlet=wlet,
+                                     free_surface=free_surface, dz=dz, dx=dx, dt=dt, tmax=tmax, data_format=data_format, order=order, vel=vel, rho=rho, npad=npad)
+        else
+           error("wrong type receiver locations")
+        end
+    end
+
+    # do simulation parallel
+    if nprocs() == 1
+       for i = 1 : ns
+           wrap_get_shotgather(argument_collection[i])
+       end
+    else
+       pmap(wrap_get_shotgather, argument_collection)
+    end
+
+    return nothing
+end
+
+"""
    get the observations for multiple single source, parallel computation is implemented
 """
 function get_observations(dir_obs::Ts, irz::Ti, irx::Ti, src::T, fidiff::P,
