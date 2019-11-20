@@ -12,6 +12,7 @@ export add_virtual_source,
        image_axpby!,
        recordings_norm,
 # # ==================== get reflections ============
+       wrap_get_shotgather,
        get_shotgather,
        get_observations,
        get_reflections,

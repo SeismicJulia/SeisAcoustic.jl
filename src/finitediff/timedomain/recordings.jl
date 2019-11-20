@@ -66,8 +66,8 @@ function Recordings(rz::Vector, rx::Vector,
     end
 
     # initalize empty recordings
-    rec= Recordings(params.nt, nr, params.dt, irz, irx, spt2rec,
-         zeros(params.data_format, params.nt, nr))
+    p  = zeros(params.data_format, params.nt, nr)
+    rec= Recordings(params.nt, nr, params.dt, irz, irx, spt2rec, p)
 
     return rec
 end
@@ -92,29 +92,16 @@ function write_recordings(path::String, rec::Recordings)
     # write the index mapping vector
     write(fid, rec.spt2rec)
 
-    # write the data_format code
-    # num_byte = sizeof(rec.p)
-    # num_elem = rec.nt * rec.nr
-    # num_byte = floor(Int64, num_byte / num_elem)
-    # if num_byte == 4
-    #    write(fid, 1)             # 1 indicate Float32
-    #
-    # elseif num_byte == 8
-    #    write(fid, 2)             # 2 indicate Float64
-    #
-    # else
-    #    error("non-support data format")
-    # end
+    # data format code
+    if eltype(rec.p) == Float32
+       write(fid, 1)             # 1 indicate Float32
 
-    # if eltype(rec.p) == Float32
-    #    write(fid, 1)             # 1 indicate Float32
-    #
-    # elseif eltype(rec.p) == Float64
-    #    write(fid, 2)             # 2 indicate Float64
-    #
-    # else
-    #    error("non-support data format")
-    # end
+    elseif eltype(rec.p) == Float64
+       write(fid, 2)             # 2 indicate Float64
+
+    else
+       error("non-support data format")
+    end
 
     # write time sampling interval
     write(fid, rec.dt)
@@ -150,20 +137,20 @@ function read_recordings(path::String)
     spt2rec = zeros(Int64, nr); read!(fid, spt2rec)
 
     # read the data_format code
-    # code = read(fid, Int64)
-    # if code == 1
-    #    data_format = Float32
-    # elseif code == 2
-    #    data_format = Float64
-    # else
-    #    error("non-support data format")
-    # end
-
-    if 8*(3*nr+2) + 8*(nr*nr+1) > filesize(path)
+    code = read(fid, Int64)
+    if code == 1
        data_format = Float32
-    else
+    elseif code == 2
        data_format = Float64
+    else
+       error("non-support data format")
     end
+
+    # if 8*(3*nr+2) + 8*(nr*nr+1) > filesize(path)
+    #    data_format = Float32
+    # else
+    #    data_format = Float64
+    # end
 
     # read the time sampling interval
     dt = read(fid, data_format)
