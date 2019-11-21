@@ -10,17 +10,17 @@ rho = 2000 * ones(nz, nx);  # kg/m^3
 npml = 20;
 
 # top boundary condition
-free_surface = false;   #(pml or free_surface)
+free_surface = true;   #(pml or free_surface)
 
 # vertical and horizontal grid size
 dz = 10; dx = 10;
 
 # time step size and maximum modelling length
-dt = 0.001; tmax = 2.0;  # use second as unit
+dt = 0.001; tmax = 3.0;  # use second as unit
 
 # organize these parameters into a structure
 params = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
-         data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
+         data_format=Float64, fd_flag="taylor", order=3, npml=20, apml=900.);
 
 # shows the default value for the keyword parameters
 # data_format = (Float32 or Float64)
@@ -33,20 +33,44 @@ src = Source(2, 150, params; ot=0.0, fdom=20.0,
       type_flag="ricker", amp=100000, location_flag="index");
 
 # initialize multi-sources
-# isx = collect(5:60:295); ns=length(isx); isz = 2*ones(ns);
-# ot  = 0.5*rand(ns);
-# srcs = get_multi_sources(isz, isx, params; amp=100000, ot=ot, fdom=15);
+isx = collect(5:60:295); ns=length(isx); isz = 2*ones(ns);
+ot  = 0.5*rand(ns);
+srcs= get_multi_sources(isz, isx, params; amp=100000, ot=ot, fdom=15);
 
 # initialize recordings
 irx = collect(1:2:params.nx);
 irz = 2 * ones(length(irx));
-rec = Recordings(irz, irx, params);
-
-# save the boundary value and last wavefield
-path_bnd = joinpath(homedir(), "Desktop/boundary.rsb");
-path_wfd = joinpath(homedir(), "Desktop/wavefield.rsb");
 
 # forward modeling of simultaneous sources
+rec = multi_step_forward!(irz, irx, src, params);
+
+# save the boundary value and last wavefield
+path_spt = joinpath(homedir(), "Desktop/snapshot.rsb");
+path_wfd = joinpath(homedir(), "Desktop/wavefield.rsb");
+path_pre = joinpath(homedir(), "Desktop/pressure.rsb");
+path_bnd = joinpath(homedir(), "Desktop/boundary.rsb");
+path_lwfd= joinpath(homedir(), "Desktop/last_wfd.rsb");
+path_sws = joinpath(homedir(), "Desktop/strength.rsb");
+
+multi_step_forward!(src, params; path_spt=path_spt, path_wfd=path_wfd, path_pre=path_pre, interval=100,
+                    path_bnd=path_bnd, path_lwfd=path_lwfd, path_sws=path_sws);
+
+(h1, spt) = read_RSdata(path_spt);
+(h2, wfd) = read_RSdata(path_wfd);
+(h3, pre) = read_RSdata(path_pre);
+(h4, bnd) = read_RSdata(path_bnd);
+(h5, lwfd) = read_RSdata(path_lwfd);
+(h6, sws) = read_RSdata(path_sws);
+
+it
+SeisPlotTX(hcat(wfd[:,:,3,10], pre[:,:,10], wfd[:,:,3,10]-pre[:,:,10]));
+
+
+
+
+@time multi_step_forward!(irz, irx, src, params; path_shot="/Users/wenlei/Desktop/test.bin");
+rec1 = read_recordings("/Users/wenlei/Desktop/test.bin")
+
 multi_step_forward!(rec, src , params; path_bnd=path_bnd, path_wfd=path_wfd);
 SeisPlotTX(rec_syn.p, pclip=98);
 
@@ -138,7 +162,7 @@ for i = 1 : rec2.nr
     copyto!(rec2.p, idx_o[1], tmp, hl+1, params.nt)
     idx_o[1] = idx_o[1] + params.nt
 end
-p1 = multi_step_adjoint!(rec2, src, params);
+@time p1 = multi_step_adjoint!(rec2, src, params);
 
 tmp1 = dot(p1, src.p)
 tmp2 = dot(vec(rec2.p), vec(rec1.p))

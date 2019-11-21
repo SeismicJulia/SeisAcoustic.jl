@@ -1,59 +1,58 @@
-# define function accept named tuple
-function wrap_get_shotgather(params::NamedTuple)
-
-    # get the original model size
-    (nz, nx) = size(params.vel)
-
-    # determine model range in spatial direction
-    ix_lower = minimum(vcat(params.source_x, params.receiver_x))
-    if ix_lower > params.npad
-       ix_lower = ix_lower - params.npad
-    else
-       ix_lower = 1
-    end
-    # upper end
-    ix_upper = maximum(vcat(params.source_x, params.receiver_x))
-    if ix_upper + params.npad > nx
-       ix_upper = nx
-    else
-       ix_upper = ix_upper + params.npad
-    end
-
-    # crop part of velocity model
-    vel = params.vel[:, ix_lower:ix_upper]
-    rho = params.rho[:, ix_lower:ix_upper]
-    fidiff = TdParams(rho, vel, params.free_surface, params.dz, params.dx, params.dt, params.tmax;
-                      data_format=params.data_format, order=params.order)
-
-    # adjust receiver's location
-    receiver_x = copy(params.receiver_x)
-    for i = 1 : length(receiver_x)
-        receiver_x[i] = receiver_x[i] - ix_lower + 1
-    end
-    dobs = Recordings(params.receiver_z, receiver_x, fidiff; location_flag=params.location_flag)
-
-    # adjust source's location
-    source_x = params.source_x - ix_lower + 1
-    src = Source(params.source_z, source_x, fidiff; p=params.wlet)
-
-    # do simulation
-    multi_step_forward!(dobs, src, fidiff)
-    rec = dobs
-
-    # save the result to disk
-    write_recordings(params.path_obs, rec)
-    # hdr = RegularSampleHeader(dobs.p)
-    # write_RSdata(params.path_obs, hdr, dobs.p)
-    return dobs
-end
-
 """
    get the observations for multiple single source, parallel computation is implemented,
-the size of velocity model is changed according to the acquisition geometry
+crop the physical model adaptively according to acquisition geometry.
 """
-function get_shotgather(dir_obs::Ts, isz, isx, wlet, irz::Ti, irx::Ti,
-                        vel::Matrix{Tv}, rho::Matrix{Tv},  dz, dx, dt, tmax;
-                        location_flag="index",  data_format=Float32, order=2, free_surface=true, npad=100) where {Ts<:String, Ti<:Vector, Tv<:Real}
+function get_shotgather_adaptive(dir_obs::Ts, isz, isx, wlet, irz::Ti, irx::Ti,
+                                 vel::Matrix{Tv}, rho::Matrix{Tv},  dz, dx, dt, tmax;
+                                 location_flag="index",  data_format=Float32, order=2, free_surface=true, npad=100) where {Ts<:String, Ti<:Vector, Tv<:Real}
+
+    # define function inside
+    function wrap_internal(params::NamedTuple)
+
+        # get the original model size
+        (nz, nx) = size(params.vel)
+
+        # determine model range in spatial direction
+        ix_lower = minimum(vcat(params.source_x, params.receiver_x))
+        if ix_lower > params.npad
+           ix_lower = ix_lower - params.npad
+        else
+           ix_lower = 1
+        end
+
+        # upper end
+        ix_upper = maximum(vcat(params.source_x, params.receiver_x))
+        if ix_upper + params.npad > nx
+           ix_upper = nx
+        else
+           ix_upper = ix_upper + params.npad
+        end
+
+        # crop part of velocity model
+        vel = params.vel[:, ix_lower:ix_upper]
+        rho = params.rho[:, ix_lower:ix_upper]
+        fidiff = TdParams(rho, vel, params.free_surface, params.dz, params.dx, params.dt, params.tmax;
+                          data_format=params.data_format, order=params.order)
+
+        # adjust receiver's location
+        receiver_x = copy(params.receiver_x)
+        for i = 1 : length(receiver_x)
+            receiver_x[i] = receiver_x[i] - ix_lower + 1
+        end
+
+        # adjust source's location
+        source_x = params.source_x - ix_lower + 1
+        src = Source(params.source_z, source_x, fidiff; p=params.wlet)
+
+        # do simulation
+        # rec = multi_step_forward!(params.receiver_z, receiver_x, src, fidiff; location_flag=params.location_flag)
+        multi_step_forward!(params.receiver_z, receiver_x, src, fidiff; location_flag=params.location_flag, path_shot=params.path_obs)
+
+        # save the result to disk
+        # write_recordings(params.path_obs, rec)
+
+        return nothing
+    end
 
     # create a fold save observations
     if isdir(dir_obs)
@@ -89,35 +88,33 @@ function get_shotgather(dir_obs::Ts, isz, isx, wlet, irz::Ti, irx::Ti,
         end
     end
 
-    # # do simulation parallel
-    # if nprocs() == 1
-    #    for i = 1 : ns
-    #        wrap_get_shotgather(argument_collection[i])
-    #    end
-    # else
-    #    pmap(wrap_get_shotgather, argument_collection)
-    # end
+    # do simulation parallel
+    if nprocs() == 1
+       for i = 1 : ns
+           wrap_internal(argument_collection[i])
+       end
+    else
+       pmap(wrap_internal, argument_collection)
+    end
 
-    return wrap_get_shotgather(argument_collection[1])
+    return nothing
 end
 
 """
    get the observations for multiple single source, parallel computation is implemented
 """
-function get_observations(dir_obs::Ts, irz::Ti, irx::Ti, src::T, fidiff::P,
+function get_shotgather(dir_obs::Ts, irz::Ti, irx::Ti, src::T, fidiff::P,
                          location_flag="index") where {Ts<:String, Ti<:Vector, T<:Union{Source, Vector{Source}}, P<:TdParams}
 
     # define function accept named tuple
-    function wrap_get_observations(params::NamedTuple)
-
-        # get whole observations
-        dobs = Recordings(params.receiver_z, params.receiver_x, params.fidiff; location_flag=params.location_flag)
+    function wrap_internal(params::NamedTuple)
 
         # do simulation
-        multi_step_forward!(dobs, params.source, params.fidiff)
+        dobs = multi_step_forward!(params.receiver_z, params.receiver_x, params.source, params.fidiff;
+               location_flag=params.location_flag, path_shot=params.path_obs)
 
         # save the result to disk
-        write_recordings(params.path_obs, dobs)
+        # write_recordings(params.path_obs, dobs)
     end
 
     # create a fold save observations
@@ -161,10 +158,10 @@ function get_observations(dir_obs::Ts, irz::Ti, irx::Ti, src::T, fidiff::P,
     # do simulation parallel
     if nprocs() == 1
        for i = 1 : ns
-           wrap_get_observations(argument_collection[i])
+           wrap_internal(argument_collection[i])
        end
     else
-       pmap(wrap_get_observations, argument_collection)
+       pmap(wrap_internal, argument_collection)
     end
 
     return nothing

@@ -316,7 +316,7 @@ end
 """
    add multi-sources simultaneously to snapshot
 """
-function add_multi_sources!(spt::Snapshot, srcs::Vector{Source}, it::Int64)
+function add_source!(spt::Snapshot, srcs::Vector{Source}, it::Int64)
 
     # number of sources
     ns = length(srcs)
@@ -331,7 +331,7 @@ end
 """
    add multi-sources simultaneously to snapshot
 """
-function add_multi_sources!(wfd::Wavefield, srcs::Vector{Source}, it::Int64)
+function add_source!(wfd::Wavefield, srcs::Vector{Source}, it::Int64)
 
     # number of sources
     ns = length(srcs)
@@ -360,7 +360,7 @@ end
 """
    subtract multiple sources from wavefield, used for backward wavefield reconstruction
 """
-function subtract_multi_sources!(wfd::Wavefield, srcs::Vector{Source}, it::Int64)
+function subtract_source!(wfd::Wavefield, srcs::Vector{Source}, it::Int64)
 
     # number of sources
     ns = length(srcs)
@@ -381,7 +381,7 @@ end
 """
    find the time range of multiple sources
 """
-function time_range_multisources(srcs::Vector{Source})
+function time_range_source(srcs::Vector{Source})
 
     tmax = 0.0
     tmin = 0.0
@@ -452,7 +452,7 @@ function read_source(path_src::String)
     return Source(isz, isx, src2spt, src2wfd, dt, it_min, it_max, p)
 end
 
-function isequal_tmp(src1::Source, src2::Source)
+function source_isequal(src1::Source, src2::Source)
 
     src1.isz     != src2.isz && (return false)
     src1.isx     != src2.isx && (return false)
@@ -461,7 +461,7 @@ function isequal_tmp(src1::Source, src2::Source)
     src1.it_min  != src2.it_min  && (return false)
     src1.it_max  != src2.it_max  && (return false)
     src1.dt      != src2.dt      && (return false)
-    norm(src1.p-src2.p)/norm(src1.p) > eps(eltype(src1.p)) && (return false)
+    norm(src1.p-src2.p)/norm(src1.p) > 10*eps(eltype(src1.p)) && (return false)
 
     return true
 end

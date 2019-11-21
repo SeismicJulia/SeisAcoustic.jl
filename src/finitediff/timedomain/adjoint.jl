@@ -17,6 +17,7 @@ function one_step_adjoint!(spt2::Snapshot, spt1::Snapshot, params::TdParams,
         end
 
         At_mul_b!(tmp_z2, params.dvdz, tmp_z1)
+        # mul!(tmp_z2, transpose(params.dvdz), tmp_z1)
 
         idx = 0
         for iz = ilower : iupper
@@ -36,6 +37,7 @@ function one_step_adjoint!(spt2::Snapshot, spt1::Snapshot, params::TdParams,
         end
 
         At_mul_b!(tmp_x2, params.dvdx, tmp_x1)
+        # mul!(tmp_x2, transpose(params.dvdx), tmp_x1)
 
         idx = iz
         for ix = 1 : params.Nx
@@ -57,6 +59,7 @@ function one_step_adjoint!(spt2::Snapshot, spt1::Snapshot, params::TdParams,
         end
 
         At_mul_b!(tmp_z2, params.dpdz, tmp_z1)
+        # mul!(tmp_z2, transpose(params.dpdz), tmp_z1)
 
         idx = 0
         for iz = ilower : iupper
@@ -75,6 +78,7 @@ function one_step_adjoint!(spt2::Snapshot, spt1::Snapshot, params::TdParams,
         end
 
         At_mul_b!(tmp_x2, params.dpdx, tmp_x1)
+        # mul!(tmp_x2, transpose(params.dpdx), tmp_x1)
 
         idx = iz
         for ix = 1 : params.Nx

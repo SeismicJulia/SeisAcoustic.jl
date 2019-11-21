@@ -298,17 +298,17 @@ for i2 = 1 : nx
 end
 
 # top boundary condition
-free_surface = true;
+free_surface = false;
 
 # vertical and horizontal grid size
 dz = 6.25; dx = 6.25;
 
 # time step size and maximum modelling length
-dt = 0.0008; tmax = 1.4;
+dt = 0.0008; tmax = 1.2;
 
-# # organize these parameters into a structure
-# fidiff = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
-#                   data_format=Float32, order=2);
+# organize these parameters into a structure
+fidiff = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
+                  data_format=Float32, order=2);
 
 # src = Source(3, 200, fidiff; p=wlet);
 # irx = collect(1:nx);
@@ -339,15 +339,14 @@ for i = 1 : ns
     isz_far[i]  = 3
 end
 
-
-dir_obs = joinpath(dir_work, "near_boat");
-get_shotgather(dir_obs, isz_near[1:2], isx_near[1:2], wlet, irz[1:2], irx[1:2], vel, rho, dz, dx, dt, tmax,
-                 location_flag="index", data_format=Float64, order=2, free_surface=true, npad=100)
+# dir_obs = joinpath(dir_work, "near_boat");
+# rec = get_shotgather_adaptive(dir_obs, isz_near[1:2], isx_near[1:2], wlet, irz[1:2], irx[1:2], vel, rho, dz, dx, dt, tmax,
+#                  location_flag="index", data_format=Float64, order=2, free_surface=true, npad=100)
 
 # # # near offset source
-srcs    = get_multi_sources(isz_near, isx_near, fidiff; p=wlet);
+srcs    = get_multi_sources(isz_near[1:2], isx_near[1:2], fidiff; p=wlet);
 dir_obs = joinpath(dir_work, "near_boat");
-get_observations(dir_obs, irz, irx, srcs, fidiff);
+get_shotgather(dir_obs, irz[1:2], irx[1:2], srcs, fidiff);
 
 # near offset source
 srcs = get_multi_sources(isz_far, isx_far, fidiff; p=wlet);

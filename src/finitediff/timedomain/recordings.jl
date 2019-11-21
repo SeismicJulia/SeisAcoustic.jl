@@ -19,9 +19,7 @@ function Recordings(rz::Vector, rx::Vector,
 
     # number of receivers
     nr  = length(rz)
-    if length(rx) != nr
-       error("length of receiver coordinate vector doesn't match")
-    end
+    nr == length(rx) || error("length of receiver coordinate doesn't match")
 
     irz = zeros(Int64, nr)
     irx = zeros(Int64, nr)
@@ -39,6 +37,7 @@ function Recordings(rz::Vector, rx::Vector,
            irz[i] = round(Int64, rz[i]/params.dz) + 1
            irx[i] = round(Int64, rx[i]/params.dx) + 1
        end
+       
     else
        error("wrong specification of receiver location")
     end
