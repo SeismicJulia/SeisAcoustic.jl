@@ -1,4 +1,4 @@
-using SeisPlot, SeisAcoustic, LinearAlgebra
+using SeisPlot, SeisAcoustic, LinearAlgebra, DSP
 
 # homogeneous velocity and density model
 nz = 101; nx = 301;
@@ -167,10 +167,9 @@ tmp2 = (dot(spt2_f.vz, spt2_b.vz) + dot(spt2_f.vx, spt2_b.vx)
 #                   dot-product test forward and adjoint operator
 # ==============================================================================
 irx = collect(1:2:params.nx); irz = 2 * ones(length(irx));
-rec1 = Recordings(irz, irx, params);
-multi_step_forward!(rec1, src, params);
+rec1= multi_step_forward!(irz, irx, src, params);
 
-# adjoint wavefield
+# band limited random recordings
 w    = ricker(10.0, params.dt)
 hl   = floor(Int64, length(w)/2)
 rec2 = Recordings(irz, irx, params);
@@ -180,7 +179,7 @@ for i = 1 : rec2.nr
     copyto!(rec2.p, idx_o[1], tmp, hl+1, params.nt)
     idx_o[1] = idx_o[1] + params.nt
 end
-@time p1 = multi_step_adjoint!(rec2, src, params);
+p1 = multi_step_adjoint!(rec2, src, params);
 
 tmp1 = dot(p1, src.p)
 tmp2 = dot(vec(rec2.p), vec(rec1.p))

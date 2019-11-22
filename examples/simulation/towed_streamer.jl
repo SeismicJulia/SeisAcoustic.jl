@@ -27,9 +27,6 @@ for i2 = 1 : nx
     end
 end
 
-# top boundary condition
-free_surface = false;
-
 # vertical and horizontal grid size
 dz = 6.25; dx = 6.25;
 
@@ -63,7 +60,82 @@ dir_obs = joinpath(dir_work, "near_boat");
 get_shotgather_adaptive(dir_obs, isz_near, isx_near, 1e5*ricker(10.0,dt), irz, irx, vel, rho, dz, dx, dt, tmax,
                         location_flag="index", data_format=Float64, order=2, free_surface=true, npad=100)
 
+dir_obs = joinpath(dir_work, "far_boat");
+get_shotgather_adaptive(dir_obs, isz_far, isx_far, 1e5*ricker(10.0,dt), irz, irx, vel, rho, dz, dx, dt, tmax,
+                        location_flag="index", data_format=Float64, order=2, free_surface=true, npad=10)
 
+scp -r wgao1@saig-ml.physics.ualberta.ca:/home/wgao1/Desktop/BP/near_boat /Users/wenlei/Desktop/BP
+rec = read_recordings("/Users/wenlei/Desktop/BP/near_boat/recordings_2.bin");
+SeisPlotTX(rec.p, cmap="gray", wbox=10, hboz=10);
+
+
+# download data to local machine
+scp -r wgao1@hijitus.physics.ualberta.ca:/home/wgao1/Desktop/BP/far_boat $HOME/Desktop/BP/
+scp -r wgao1@saig-ml.physics.ualberta.ca:/home/wgao1/Desktop/BP/near_boat $HOME/Desktop/BP/
+
+# resample the recordings from 0.8 ms to 4ms
+dir_work = joinpath(homedir(), "Desktop/BP");
+dt_new = 0.004; dt = 0.0008;
+interval = floor(Int64, dt_new/dt)-1;
+
+ns = 40;
+dir_near = joinpath(dir_work, "near_boat");
+dir_near_4ms = joinpath(dir_work, "near_boat_4ms");
+for i =1 : ns
+    path_in  = join([dir_near "/recordings_" "$i" ".bin"]);
+    path_out = join([dir_near_4ms "/pressure_" "$i" ".rsf"]);
+    rec      = read_recordings(path_in)
+    p        = rec.p[1:interval:end,:]
+
+    hdr      = RegularSampleHeader(p, d1=dt_new, d2=12.5)
+    write_RSdata(path_out, hdr, p)
+end
+
+dir_far = joinpath(dir_work, "far_boat");
+dir_far_4ms = joinpath(dir_work, "far_boat_4ms");
+for i = 1 : ns
+    path_in  = join([dir_far "/recordings_" "$i" ".bin"]);
+    path_out = join([dir_far_4ms "/pressure_" "$i" ".rsf"]);
+    rec      = read_recordings(path_in)
+    p        = rec.p[1:interval:end,:]
+
+    hdr      = RegularSampleHeader(p, d1=dt_new, d2=12.5)
+    write_RSdata(path_out, hdr, p)
+end
+
+# make a cube
+dir_near_4ms = joinpath(dir_work, "near_boat_4ms");
+path = joinpath(dir_near_4ms, "pressure_1.rsf");
+hdr  = read_RSheader(path);
+p    = zeros(hdr.data_format, hdr.n1, hdr.n2, ns);
+for i = 1 : ns
+    path = join([dir_near_4ms "/pressure_" "$i" ".rsf"])
+    (hdr, d) = read_RSdata(path)
+    p[:,:,i].= d
+end
+SeisPlotTX(p[:,:,1], cmap="gray", wbox=10, hbox=10);
+
+path = joinpath(homedir(), "Desktop/Data_Beijing_Workshop/Marmousi2/near_4ms.rsf");
+hdr  = RegularSampleHeader(p, d1=0.004, d2=12.5, d3=25.0, unit1="s", unit2="meter", unit3="meter");
+write_RSdata(path, hdr, p);
+
+dir_far_4ms = joinpath(dir_work, "far_boat_4ms");
+path = joinpath(dir_far_4ms, "pressure_1.rsf");
+hdr  = read_RSheader(path);
+p    = zeros(hdr.data_format, hdr.n1, hdr.n2, ns);
+for i = 1 : ns
+    path = join([dir_far_4ms "/pressure_" "$i" ".rsf"])
+    (hdr, d) = read_RSdata(path)
+    p[:,:,i].= d
+end
+path = joinpath(homedir(), "Desktop/Marmousi2/far_4ms.rsf");
+hdr  = RegularSampleHeader(p, d1=0.004, d2=12.5, d3=25.0, unit1="s", unit2="meter", unit3="meter");
+write_RSdata(path, hdr, p);
+
+
+# ==============================================================================
+#                                   Marmousi2
+# ==============================================================================
 # using SeisAcoustic
 #
 # dir_work = joinpath(homedir(), "Desktop/Marmousi2");
@@ -129,7 +201,7 @@ get_shotgather_adaptive(dir_obs, isz_near, isx_near, 1e5*ricker(10.0,dt), irz, i
 # dir_obs = joinpath(dir_work, "near_boat");
 # get_observations(dir_obs, irz, irx, srcs, fidiff);
 #
-# # near offset source
+# # far offset source
 # il = 206; iu=ns;
 # srcs = get_multi_sources(isz_far[il:iu], isx_far[il:iu], fidiff; p=wlet);
 # dir_obs = joinpath(dir_work, "far_boat");
@@ -340,17 +412,3 @@ get_shotgather_adaptive(dir_obs, isz_near, isx_near, 1e5*ricker(10.0,dt), irz, i
 # srcs = get_multi_sources(isz_far, isx_far, fidiff; p=wlet);
 # dir_obs = joinpath(dir_work, "far_boat");
 # get_observations(dir_obs, irz, irx, srcs, fidiff);
-#
-#
-#
-# # ===============================================================================
-# #          plotting
-# # ===============================================================================
-# dir_work = joinpath(homedir(), "Desktop/BP");
-# dir_near = joinpath(dir_work, "near_boat");
-#
-# idx      = 1
-# path_rec = join([dir_near "/recordings_" "$idx" ".bin"]);
-# rec      = read_recordings(path_rec);
-#
-# SeisPlot(rec.p)
