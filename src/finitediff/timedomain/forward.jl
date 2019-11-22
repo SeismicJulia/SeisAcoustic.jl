@@ -435,8 +435,17 @@ end
    Forward reconstruct acoustic pressure field using the saved boundary wavefield value and
 the source (used for concept proofing)
 """
-function pressure_reconstruct_forward(path_bnd::Ts, src::Source,
-         params::TdParams) where {Ts <: String}
+function pressure_reconstruct_forward(path_bnd::Tp, src::Ts,
+         params::TdParams) where {Tp<:String, Ts<:Union{Source,Vector{Source}}}
+
+    # make the source as a vector has one element
+    if Ts <: Source
+       srcs    = Vector{Source}(undef,1)
+       srcs[1] = src
+    else
+       srcs    = src
+    end
+    ns = length(srcs)
 
     # length of one-step pressure field
     N = params.nz * params.nx
@@ -444,72 +453,6 @@ function pressure_reconstruct_forward(path_bnd::Ts, src::Source,
     # initialize intermediate variables
     wfd1 = Wavefield(params)
     wfd2 = Wavefield(params)
-    tmp_z1 = zeros(params.data_format, params.nz)
-    tmp_z2 = zeros(params.data_format, params.nz)
-    tmp_x1 = zeros(params.data_format, params.nx)
-    tmp_x2 = zeros(params.data_format, params.nx)
-
-    # initialize boundary value
-    fid_bnd = open(path_bnd, "r")
-    bnd = WavefieldBound(params)
-
-    # allocate memory for saving pressure field
-    pre = zeros(params.data_format, N * params.nt)
-
-    # add source to the first wavefield
-    add_source!(wfd1, src, 1)
-
-    # save pressure field
-    copyto!(pre, 1, wfd1.p, 1, N)
-
-    # the start index for saving the next pressure field
-    idx_o = N+1
-
-    # loop over time stepping
-    for it = 2 : params.nt
-
-        # read the boundary value
-        read_one_boundary!(bnd, fid_bnd, it, params)
-
-        # forward time steping and correcting boundaries
-        one_step_forward!(wfd2, wfd1, bnd, params,
-                          tmp_z1, tmp_z2, tmp_x1, tmp_x2)
-
-        # add source to wavefield
-        if (params.order+1 <= src.isz <= params.nz-params.order &&
-            params.order+1 <= src.isx <= params.nx-params.order)
-
-            add_source!(wfd2, src, it)
-        end
-
-        # save the pressure field
-        copyto!(pre, idx_o, wfd2.p, 1, N)
-        idx_o = idx_o + N
-
-        # prepare for next step
-        copy_wavefield!(wfd1, wfd2)
-    end
-
-    close(fid_bnd)
-    return reshape(pre, params.nz, params.nx, params.nt)
-end
-
-"""
-   Forward reconstruct acoustic pressure field using the saved boundary wavefield value and
-the source (used for concept proofing)
-"""
-function pressure_reconstruct_forward(path_bnd::Ts, srcs::Vector{Source},
-         params::TdParams) where {Ts <: String}
-
-    # length of one-step pressure field
-    N = params.nz * params.nx
-
-    # number of sources
-    ns= length(srcs)
-
-    # initialize intermediate variables
-    wfd1   = Wavefield(params)
-    wfd2   = Wavefield(params)
     tmp_z1 = zeros(params.data_format, params.nz)
     tmp_z2 = zeros(params.data_format, params.nz)
     tmp_x1 = zeros(params.data_format, params.nx)
@@ -561,6 +504,7 @@ function pressure_reconstruct_forward(path_bnd::Ts, srcs::Vector{Source},
     close(fid_bnd)
     return reshape(pre, params.nz, params.nx, params.nt)
 end
+
 
 # function multi_step_forward!(rec::Recordings, srcs::Vector{Source}, params::TdParams;
 #                              path_spt="NULL", path_wfd="NULL", path_pre="NULL", interval=1)

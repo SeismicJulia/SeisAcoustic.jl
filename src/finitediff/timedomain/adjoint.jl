@@ -107,8 +107,8 @@ end
 """
    save the adjoint snapshot, wavefield or pressure field
 """
-function multi_step_adjoint!(path::String, rec::Recordings, params::TdParams;
-                             save_flag="pressure")
+function multi_step_adjoint!(rec::Recordings, params::TdParams;
+                             path_spt="NULL", path_wfd="NULL" , path_pre="NULL", interval=200)
 
     # initialize intermediate variables
     spt1 = Snapshot(params)
@@ -123,24 +123,24 @@ function multi_step_adjoint!(path::String, rec::Recordings, params::TdParams;
     inject_rec2spt!(spt2, rec, params.nt)
 
     # the time range of source function
-    if save_flag == "snapshot"
-       hdr = snapshot_header(params)
-       fid = write_RSheader(path, hdr)
-       append_one_snapshot(fid, spt2)
+    if path_spt != "NULL"
+       hdr_spt = snapshot_header(params, interval)
+       fid_spt = write_RSheader(path, hdr_spt)
+       append_one_snapshot(fid_spt, spt2)
+    end
 
     # save wavefield
-    elseif save_flag == "wavefield"
-       hdr = wavefield_header(params)
-       fid = write_RSheader(path, hdr)
-       append_one_wavefield(fid, spt2, params)
+    if path_wfd != "NULL"
+       hdr_wfd = wavefield_header(params, interval)
+       fid_wfd = write_RSheader(path, hdr_wfd)
+       append_one_wavefield(fid_wfd, spt2, params)
+    end
 
     # save pressure
-    elseif save_flag == "pressure"
-       hdr = pressure_header(params)
-       fid = write_RSheader(path, hdr)
-       append_one_pressure(fid, spt2, params)
-    else
-       error("save_type only support snapshot, wavefield or pressure")
+    if path_pre != "NULL"
+       hdr_pre = pressure_header(params, interval)
+       fid_pre = write_RSheader(path, hdr_pre)
+       append_one_pressure(fid_pre, spt2, params)
     end
 
     # back propagation
@@ -150,24 +150,26 @@ function multi_step_adjoint!(path::String, rec::Recordings, params::TdParams;
         inject_rec2spt!(spt1, rec, it)
         copy_snapshot!(spt2, spt1)
 
-        if save_flag == "snapshot"
-           append_one_snapshot(fid, spt2)
-
-        elseif save_flag == "wavefield"
-           append_one_wavefield(fid, spt2, params)
-
-        elseif save_flag == "pressure"
-           append_one_pressure(fid, spt2, params)
+        # save wavefield at current step to disk
+        if mod(it-1, interval) == 0
+           path_spt != "NULL" && append_one_snapshot(fid_spt, spt2)
+           path_wfd != "NULL" && append_one_wavefield(fid_wfd, spt2, params)
+           path_pre != "NULL" && append_one_pressure(fid_pre, spt2, params)
         end
     end
 
-    close(fid)
+    # close file and flush the buffer
+    path_spt != "NULL" && close(fid_spt)
+    path_wfd != "NULL" && close(fid_wfd)
+    path_pre != "NULL" && close(fid_pre)
 
     # reverse the time order of the adjoint wavefield
-    tmp_dir = splitdir(path)
-    path_tmp= joinpath(tmp_dir[1], "tmp_reverse_file.rsb")
-    reverse_order(path_tmp, path; save_flag=save_flag)
-    mv(path_tmp, path, force=true)
+    if path_spt != "NULL"
+       tmp_dir = splitdir(path_spt)
+       path_tmp= joinpath(tmp_dir[1], "tmp_reverse_file.rsb")
+       reverse_order(path_tmp, path_spt; save_flag=save_flag)
+       mv(path_tmp, path, force=true)
+    end
 
     return nothing
 end
@@ -321,8 +323,17 @@ end
    Reconstruct pressure field backward using the boundary wavefield value and
 the last wavefield
 """
-function pressure_reconstruct_backward(path_bnd::Ts, path_wfd::Ts,
-         src::Source, params::TdParams) where {Ts <: String}
+function pressure_reconstruct_backward(path_bnd::Tp, path_wfd::Tp,
+         src::Ts, params::TdParams) where {Tp<:String, Ts<:Union{Source,Vector{Source}}}
+
+    # make the source as a vector has one element
+    if Ts <: Source
+       srcs    = Vector{Source}(undef,1)
+       srcs[1] = src
+    else
+       srcs    = src
+    end
+    ns = length(srcs)
 
     # length of one-step pressure field
     N = params.nz * params.nx
@@ -337,7 +348,7 @@ function pressure_reconstruct_backward(path_bnd::Ts, path_wfd::Ts,
 
     # initialize boundary value
     fid_bnd = open(path_bnd, "r")
-    bnd = WavefieldBound(params)
+    bnd     = WavefieldBound(params)
 
     # pre-allocate memory for saving the reconstructed pressure field
     pre = zeros(params.data_format, N * params.nt)
@@ -345,7 +356,7 @@ function pressure_reconstruct_backward(path_bnd::Ts, path_wfd::Ts,
     copyto!(pre, idx_o, wfd2.p, 1, N)
 
     # prepare for backward reconstruction
-    subtract_source!(wfd2, src, params.nt)
+    subtract_source!(wfd2, srcs, params.nt)
 
     # backward iterations
     for it = params.nt-1 : -1 : 1
@@ -363,60 +374,7 @@ function pressure_reconstruct_backward(path_bnd::Ts, path_wfd::Ts,
 
         # prepare for next step
         copy_wavefield!(wfd2, wfd1)
-        subtract_source!(wfd2, src, it)
-    end
-
-    close(fid_bnd)
-    return reshape(pre, params.nz, params.nx, params.nt)
-end
-
-"""
-   Reconstruct pressure field backward using the boundary wavefield value and
-the last wavefield when the wavefield is generated with multiple sources
-"""
-function pressure_reconstruct_backward(path_bnd::Ts, path_wfd::Ts,
-         srcs::Vector{Source}, params::TdParams) where {Ts <: String}
-
-    # length of one-step pressure field
-    N = params.nz * params.nx
-
-    # initialize intermediate variables
-    wfd1 = Wavefield(params)
-    wfd2 = read_one_wavefield(path_wfd, 1)
-    tmp_z1 = zeros(params.data_format, params.nz)
-    tmp_z2 = zeros(params.data_format, params.nz)
-    tmp_x1 = zeros(params.data_format, params.nx)
-    tmp_x2 = zeros(params.data_format, params.nx)
-
-    # initialize boundary value
-    fid_bnd = open(path_bnd, "r")
-    bnd = WavefieldBound(params)
-
-    # pre-allocate memory for saving the reconstructed pressure field
-    pre = zeros(params.data_format, N * params.nt)
-    idx_o = N*params.nt - N + 1                     # the pressure field at last time step
-    copyto!(pre, idx_o, wfd2.p, 1, N)
-
-    # prepare for the backward reconstruction
-    subtract_multi_sources!(wfd2, srcs, params.nt)
-
-    # backward iterations
-    for it = params.nt-1 : -1 : 1
-
-        # read the boundary value
-        read_one_boundary!(bnd, fid_bnd, it, params)
-
-        # one step back
-        one_step_backward!(wfd1, wfd2, bnd, params,
-                           tmp_z1, tmp_z2, tmp_x1, tmp_x2)
-
-        # save the pressure field
-        idx_o = idx_o - N
-        copyto!(pre, idx_o, wfd1.p, 1, N)
-
-        # prepare for next step
-        copy_wavefield!(wfd2, wfd1)
-        subtract_multi_sources!(wfd2, srcs, it)
+        subtract_source!(wfd2, srcs, it)
     end
 
     close(fid_bnd)

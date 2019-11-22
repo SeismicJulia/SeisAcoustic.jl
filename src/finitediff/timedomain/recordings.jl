@@ -37,7 +37,7 @@ function Recordings(rz::Vector, rx::Vector,
            irz[i] = round(Int64, rz[i]/params.dz) + 1
            irx[i] = round(Int64, rx[i]/params.dx) + 1
        end
-       
+
     else
        error("wrong specification of receiver location")
     end
@@ -194,4 +194,20 @@ function inject_rec2spt!(spt::Snapshot, rec::Recordings, it::Int64)
     end
 
     return nothing
+end
+
+"""
+   check whether two shot gathers are equal to each other
+"""
+function recordings_isequal(rec1::Tr, rec2::Tr) where {Tr<:Recordings}
+
+    rec1.nt      != rec2.nt      && (return false)
+    rec1.nr      != rec2.nr      && (return false)
+    rec1.dt      != rec2.dt      && (return false)
+    rec1.irz     != rec2.irz     && (return false)
+    rec1.irx     != rec2.irx     && (return false)
+    rec1.spt2rec != rec2.spt2rec && (return false)
+    norm(rec1.p-rec2.p)/norm(rec1.p) > 10*eps(eltype(rec1.p)) && (return false)
+
+    return true
 end

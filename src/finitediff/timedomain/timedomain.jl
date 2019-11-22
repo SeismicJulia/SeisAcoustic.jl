@@ -64,6 +64,7 @@ export get_gamma_profile,
        read_recordings,
        sample_spt2rec!,
        inject_rec2spt!,
+       recordings_isequal,
 # ============= forward time stepping =============
        A_mul_b!,
        At_mul_b!,

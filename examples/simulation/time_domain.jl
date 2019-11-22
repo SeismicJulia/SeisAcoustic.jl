@@ -1,4 +1,4 @@
-using SeisPlot, SeisAcoustic
+using SeisPlot, SeisAcoustic, LinearAlgebra
 
 # homogeneous velocity and density model
 nz = 101; nx = 301;
@@ -20,7 +20,7 @@ dt = 0.001; tmax = 3.0;  # use second as unit
 
 # organize these parameters into a structure
 params = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
-         data_format=Float64, fd_flag="taylor", order=3, npml=20, apml=900.);
+         data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
 
 # shows the default value for the keyword parameters
 # data_format = (Float32 or Float64)
@@ -28,64 +28,41 @@ params = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
 # order       = 2 - 10 if we use "ls" to compute the FD coefficients
 #             = 2 - n  if we use "taylor" expansion to compute FD coefficients
 
-# initialize a source
-src = Source(2, 150, params; ot=0.0, fdom=20.0,
+# ==============================================================================
+#                          single source simulation
+# ==============================================================================
+src = Source(2, 150, params; ot=0.0, fdom=15.0,
       type_flag="ricker", amp=100000, location_flag="index");
-
-# initialize multi-sources
-isx = collect(5:60:295); ns=length(isx); isz = 2*ones(ns);
-ot  = 0.5*rand(ns);
-srcs= get_multi_sources(isz, isx, params; amp=100000, ot=ot, fdom=15);
 
 # initialize recordings
 irx = collect(1:2:params.nx);
 irz = 2 * ones(length(irx));
 
 # forward modeling of simultaneous sources
-rec = multi_step_forward!(irz, irx, src, params);
+rec       = multi_step_forward!(irz, irx, src, params);
+path_shot = multi_step_forward!(irz, irx, src, params; path_shot="/Users/wenlei/Desktop/test.bin");
+rec1      = read_recordings(path_shot);
+recordings_isequal(rec, rec1)
 
 # save the boundary value and last wavefield
-path_spt = joinpath(homedir(), "Desktop/snapshot.rsb");
+path_spt = joinpath(homedir(), "Desktop/snapshot.rsb" );
 path_wfd = joinpath(homedir(), "Desktop/wavefield.rsb");
-path_pre = joinpath(homedir(), "Desktop/pressure.rsb");
-path_bnd = joinpath(homedir(), "Desktop/boundary.rsb");
-path_lwfd= joinpath(homedir(), "Desktop/last_wfd.rsb");
-path_sws = joinpath(homedir(), "Desktop/strength.rsb");
+path_pre = joinpath(homedir(), "Desktop/pressure.rsb" );
+path_bnd = joinpath(homedir(), "Desktop/boundary.rsb" );
+path_lwfd= joinpath(homedir(), "Desktop/last_wfd.rsb" );
+path_sws = joinpath(homedir(), "Desktop/strength.rsb" );
 
-multi_step_forward!(src, params; path_spt=path_spt, path_wfd=path_wfd, path_pre=path_pre, interval=100,
+multi_step_forward!(src, params; path_spt=path_spt, path_wfd=path_wfd, path_pre=path_pre, interval=1,
                     path_bnd=path_bnd, path_lwfd=path_lwfd, path_sws=path_sws);
 
-(h1, spt) = read_RSdata(path_spt);
-(h2, wfd) = read_RSdata(path_wfd);
-(h3, pre) = read_RSdata(path_pre);
-(h4, bnd) = read_RSdata(path_bnd);
-(h5, lwfd) = read_RSdata(path_lwfd);
-(h6, sws) = read_RSdata(path_sws);
-
-it
-SeisPlotTX(hcat(wfd[:,:,3,10], pre[:,:,10], wfd[:,:,3,10]-pre[:,:,10]));
-
-
-
-
-@time multi_step_forward!(irz, irx, src, params; path_shot="/Users/wenlei/Desktop/test.bin");
-rec1 = read_recordings("/Users/wenlei/Desktop/test.bin")
-
-multi_step_forward!(rec, src , params; path_bnd=path_bnd, path_wfd=path_wfd);
-SeisPlotTX(rec_syn.p, pclip=98);
-
 # save the pressure field
-path_pre = joinpath(homedir(), "Desktop/pressure.rsb");
-
-# multi_step_forward!(path_pre, src, params; save_flag="pressure");
-multi_step_forward!(path_pre, src, params; save_flag="pressure");
 (hdr, p0) = read_RSdata(path_pre);
 
 # reconstruct the pressure field forward
 p1 = pressure_reconstruct_forward(path_bnd, src, params);
 
 # reconstruct the pressure field backward
-p2 = pressure_reconstruct_backward(path_bnd, path_wfd, src, params);
+p2 = pressure_reconstruct_backward(path_bnd, path_lwfd, src, params);
 
 # testing wavefield reconstruction forward or backward
 SeisPlotTX(p0[:,:,500], pclip=98, cmap="seismic", wbox=6, hbox=2);
@@ -95,7 +72,47 @@ norm(p0-p1) / norm(p0)
 norm(p0-p2) / norm(p0)
 
 # ==============================================================================
-#                   dot-product test for the adjoint wavefield
+#                          simultaneouse source
+# ==============================================================================
+isx = collect(5:60:295); ns=length(isx); isz = 2*ones(ns);
+ot  = 0.5*rand(ns);
+src = get_multi_sources(isz, isx, params; amp=100000, ot=ot, fdom=15);
+
+# forward modeling of simultaneous sources
+rec       = multi_step_forward!(irz, irx, src, params);
+path_shot = multi_step_forward!(irz, irx, src, params; path_shot="/Users/wenlei/Desktop/test.bin");
+rec1      = read_recordings(path_shot);
+recordings_isequal(rec, rec1)
+
+# save the boundary value and last wavefield
+path_spt = joinpath(homedir(), "Desktop/snapshot.rsb" );
+path_wfd = joinpath(homedir(), "Desktop/wavefield.rsb");
+path_pre = joinpath(homedir(), "Desktop/pressure.rsb" );
+path_bnd = joinpath(homedir(), "Desktop/boundary.rsb" );
+path_lwfd= joinpath(homedir(), "Desktop/last_wfd.rsb" );
+path_sws = joinpath(homedir(), "Desktop/strength.rsb" );
+
+multi_step_forward!(src, params; path_spt=path_spt, path_wfd=path_wfd, path_pre=path_pre, interval=1,
+                    path_bnd=path_bnd, path_lwfd=path_lwfd, path_sws=path_sws);
+
+# save the pressure field
+(hdr, p0) = read_RSdata(path_pre);
+
+# reconstruct the pressure field forward
+p1 = pressure_reconstruct_forward(path_bnd, src, params);
+
+# reconstruct the pressure field backward
+p2 = pressure_reconstruct_backward(path_bnd, path_lwfd, src, params);
+
+# testing wavefield reconstruction forward or backward
+SeisPlotTX(p0[:,:,500], pclip=98, cmap="seismic", wbox=6, hbox=2);
+SeisPlotTX(p1[:,:,500], pclip=98, cmap="seismic", wbox=6, hbox=2);
+SeisPlotTX(p2[:,:,500], pclip=98, cmap="seismic", wbox=6, hbox=2);
+norm(p0-p1) / norm(p0)
+norm(p0-p2) / norm(p0)
+
+# ==============================================================================
+#                   dot-product test forward and adjoint operator
 # ==============================================================================
 # test the one-step adjoint operator
 spt1_f = Snapshot(params);
@@ -117,14 +134,14 @@ for ix = 1 : params.Nx
 end
 
 # temporary variables
-tmp = zeros(params.Nz * params.Nx);
+tmp    = zeros(params.Nz * params.Nx);
 tmp_z1 = zeros(params.data_format, params.Nz);
 tmp_z2 = zeros(params.data_format, params.Nz);
 tmp_x1 = zeros(params.data_format, params.Nx);
 tmp_x2 = zeros(params.data_format, params.Nx);
 
 # nt-step forward
-nt = 10
+nt = 200
 for it = 1 : nt
     one_step_forward!(spt2_f, spt1_f, params, tmp_z1, tmp_z2, tmp_x1, tmp_x2);
     copy_snapshot!(spt1_f, spt2_f);
@@ -146,8 +163,9 @@ tmp2 = (dot(spt2_f.vz, spt2_b.vz) + dot(spt2_f.vx, spt2_b.vx)
 (tmp1-tmp2) / tmp1
 
 
-# test multi-step adjoint operator
-# forward modelling
+# ==============================================================================
+#                   dot-product test forward and adjoint operator
+# ==============================================================================
 irx = collect(1:2:params.nx); irz = 2 * ones(length(irx));
 rec1 = Recordings(irz, irx, params);
 multi_step_forward!(rec1, src, params);

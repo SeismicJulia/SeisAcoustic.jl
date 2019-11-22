@@ -197,10 +197,10 @@ function write_wavefield(path::String, wfd::Wavefield, params::TdParams)
     data_format = eltype(wfd.vz)
 
     hdr = RegularSampleHeader(n1=n1, n2=n2, n3=3,
-                              o1=1 , o2=1 , o3=1,
-                              d1=1 , d2=1 , d3=1,
-                              label1="wavefield value", label2="component",
-                              title="last wavefield", data_format=data_format)
+                              o1=0.0, o2=0.0, o3=1.0,
+                              d1=params.dz, d2=params.dx, d3=1.0,
+                              label1="z-axis", label2="x-axis", label3="component",
+                              title="wavefield at one time step", data_format=data_format)
 
     fid = write_RSheader(path, hdr)
     write(fid, wfd.vz)
