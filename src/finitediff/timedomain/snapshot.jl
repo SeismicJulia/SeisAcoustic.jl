@@ -10,7 +10,7 @@ struct Snapshot{Tv<:AbstractFloat}
 end
 
 """
-   Initialize a empty snapshot, all the fields are zero vectors
+   constructor of snapshot
 """
 function Snapshot(params::TdParams)
 
@@ -22,7 +22,7 @@ function Snapshot(params::TdParams)
 end
 
 """
-   Struct for wavefiled which include three fields(vz, vx, p), PML boundary part are cropped
+   Struct for wavefiled which include three fields(vz, vx, p), PML boundary are truncated
 """
 struct Wavefield{Tv<:AbstractFloat}
      vz :: Vector{Tv}
@@ -31,7 +31,7 @@ struct Wavefield{Tv<:AbstractFloat}
 end
 
 """
-   Initialize zero wavefield
+   constructor of wavefield
 """
 function Wavefield(params::TdParams)
 
@@ -42,25 +42,26 @@ function Wavefield(params::TdParams)
 end
 
 """
-   Crop the PML layers of snapshot and sum pz, px to obtain wavefield at one time step
+   sample snapshot to get wavefield
 """
 function sample_spt2wfd(spt::Snapshot, params::TdParams)
 
     # initial a empty wavefield
     wfd = Wavefield(params)
+    N   = length(params.spt2wfd)
 
-    i = 0
-    for j in params.spt2wfd
-        i = i + 1
+    for i = 1 : N
+        j = params.spt2wfd[i]
         wfd.vz[i] = spt.vz[j]
         wfd.vx[i] = spt.vx[j]
         wfd.p[i]  = spt.pz[j] + spt.px[j]
     end
+
     return wfd
 end
 
 """
-   sample the adjoint snapshot to get the pressure field and field at boundary part are cropped
+   sample snapshot to get pressure field
 """
 function sample_adjoint2pre!(p::Vector{Tv}, spt::Snapshot,
          params::TdParams) where {Tv <: AbstractFloat}
@@ -562,165 +563,3 @@ function reverse_order(path::String, path_tmp::String; save_flag="snapshot")
 
     return nothing
 end
-
-#////////////////////// fixed them at this step ////////////////////////////////
-# """
-#    compute the l1l2 mixed norm (group sparsity)
-# """
-# function l1l2norm_pressure(path::String)
-#
-#     hdr = read_USdata(path_tmp, data_flag=false)
-#     tmp =
-#
-#
-#     for it = 1 : hdr.n2
-#         sts = read(fid, Float64, nz*nx)
-#         tmp = tmp + sts.^2
-#     end
-#     close(fid)
-#     tmp = sqrt(tmp)
-#     return tmp
-# end
-
-# function L2normStress(path::String )
-#     (nz, nx, ext, iflag, dt, nt) = InfoStress(path)
-#     fid = open(path, "r")
-#     seek(fid, sizeof(Float64)*5)
-#     tmp = 0.0
-#     for it = 1 : nt
-#         spt = read(fid, Float64, nz*nx)
-#         tmp = tmp + dot(spt, spt)
-#     end
-#     close(fid)
-#     tmp = sqrt(tmp)
-#     return tmp
-# end
-#
-# function scaleStress(path::String , alpha::Float64)
-#     (nz, nx, ext, iflag, dt, nt) = InfoStress(path)
-#     fid = open(path, "r+")
-#     pre = sizeof(Float64) * 5
-#     lspt = nz*nx*sizeof(Float64)
-#     for it = 1 : nt
-#         position = pre + (it-1)*lspt
-#         seek(fid, position)
-#         spt = read(fid, Float64, nz*nx)
-#         spt[:] = spt * alpha
-#         seek(fid, position)
-#         write(fid, spt)
-#     end
-#     close(fid)
-#     return nothing
-# end
-#
-# function addStress2Spt!(spt::SnapShot, path::String )
-#     it = spt.it
-#     nz = spt.nz;   nx = spt.nx;
-#     ext = spt.ext; iflag = spt.iflag;
-#     if iflag == 1
-#        zupper = ext
-#        Nz = nz + 2*ext
-#     elseif iflag == 2
-#        zupper = 0
-#        Nz = nz +   ext
-#     end
-#     Nx = nx + 2*ext
-#     sts = readStress(path, it)
-#     p   = sts.p * 1/2
-#     tmp = reshape(spt.pz, Nz, Nx)
-#     tmp[zupper+1:nz+zupper, ext+1:ext+nx] = tmp[zupper+1:nz+zupper, ext+1:ext+nx] + p
-#     spt.pz = vec(tmp)
-#     tmp = reshape(spt.px, Nz, Nx)
-#     tmp[zupper+1:nz+zupper, ext+1:ext+nx] = tmp[zupper+1:nz+zupper, ext+1:ext+nx] + p
-#     spt.px = vec(tmp)
-#     return nothing
-# end
-#
-# function addReflection2Spt!(spt::SnapShot, I::Array{Float64,2}, path::String )
-#     it = spt.it
-#     nz = spt.nz; nx = spt.nx;
-#     ext = spt.ext; iflag = spt.iflag;
-#     if iflag == 1
-#        zupper = ext
-#        Nz = nz + 2*ext
-#     elseif iflag == 2
-#        zupper = 0
-#        Nz = nz +   ext
-#     end
-#     Nx = nx + 2*ext
-#     sts = readStress(path, it)
-#     ref = sts.p .* I * 1/2
-#     tmp = reshape(spt.pz, Nz, Nx)
-#     tmp[zupper+1:nz+zupper, ext+1:ext+nx] = tmp[zupper+1:nz+zupper, ext+1:ext+nx] + ref
-#     spt.pz[:] = vec(tmp)
-#     tmp = reshape(spt.px, Nz, Nx)
-#     tmp[zupper+1:nz+zupper, ext+1:ext+nx] = tmp[zupper+1:nz+zupper, ext+1:ext+nx] + ref
-#     spt.px[:] = vec(tmp)
-#     return nothing
-# end
-#
-# function spt2dis(w::Array{Float64,1}, spt::SnapShot)
-#     nz = spt.nz ; nx = spt.nx;
-#     ext= spt.ext; iflag = spt.iflag;
-#     it = spt.it
-#     if length(w) < spt.it
-#        error("out of source time range")
-#     end
-#     if iflag == 1
-#        zupper = ext
-#        Nz = nz + 2*ext
-#     elseif iflag == 2
-#        zupper = 0
-#        Nz = nz +   ext
-#     end
-#     Nx = nx + 2*ext
-#     pz = reshape(spt.pz, Nz, Nx)[zupper+1:zupper+nz, ext+1:ext+nx]
-#     px = reshape(spt.px, Nz, Nx)[zupper+1:zupper+nz, ext+1:ext+nx]
-#     dis = 1/2 * w[it] * (pz+px)
-#     return dis
-# end
-#
-# function spt2wlet(w::Array{Float64,1}, dis::Array{Float64,2}, spt::SnapShot)
-#     nz = spt.nz ; nx = spt.nx;
-#     ext= spt.ext; iflag = spt.iflag;
-#     it = spt.it
-#     if length(w) < it
-#        error("out of source time range")
-#     end
-#     if iflag == 1
-#        zupper = ext
-#        Nz = nz + 2*ext
-#     elseif iflag == 2
-#        zupper = 0
-#        Nz = nz +   ext
-#     end
-#     Nx = nx + 2*ext
-#     p = reshape(spt.pz, Nz, Nx)[zupper+1:zupper+nz, ext+1:ext+nx] + reshape(spt.px, Nz, Nx)[zupper+1:zupper+nz, ext+1:ext+nx]
-#     p = vec(p)
-#     w[it] = 1/2 * dot(vec(dis), vec(p))
-#     return nothing
-# end
-#
-# function diswlet2spt(dis::Array{Float64,1}, w::Array{Float64,1}, nz::Int64, nx::Int64, ext::Int64, iflag::Int64, dt::Float64, it::Int64)
-#     if length(w) < it
-#        error("out of source time range")
-#     end
-#     if length(dis) != nz*nx
-#        error("length of dis does not much model size")
-#     end
-#     if iflag == 1
-#        zupper = ext
-#        Nz = nz + 2*ext
-#     elseif iflag == 2
-#        zupper = 0
-#        Nz = nz +   ext
-#     end
-#     Nx = nx + 2*ext
-#     spt = InitSnapShot(0, 0, nz, nx, ext, iflag, dt, it)
-#     tmp = zeros(Nz, Nx); dis_tmp = reshape(dis, nz, nx)
-#     tmp[zupper+1: zupper+nz, ext+1:ext+nx] = 1/2 * w[it] * dis_tmp
-#     tmp = vec(tmp)
-#     spt.pz[:] = tmp[:]
-#     spt.px[:] = tmp[:]
-#     return spt
-# end

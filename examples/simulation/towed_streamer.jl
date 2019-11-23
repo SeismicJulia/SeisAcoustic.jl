@@ -60,8 +60,10 @@ dir_obs = joinpath(dir_work, "near_boat");
 get_shotgather_adaptive(dir_obs, isz_near, isx_near, 1e5*ricker(10.0,dt), irz, irx, vel, rho, dz, dx, dt, tmax,
                         location_flag="index", data_format=Float64, order=2, free_surface=true, npad=100)
 
+# neurus last 100 (415-510)
+i1 = 415; i2 = 510;
 dir_obs = joinpath(dir_work, "far_boat");
-get_shotgather_adaptive(dir_obs, isz_far, isx_far, 1e5*ricker(10.0,dt), irz, irx, vel, rho, dz, dx, dt, tmax,
+get_shotgather_adaptive(dir_obs, isz_far[i1:i2], isx_far[i1:i2], 1e5*ricker(10.0,dt), irz[i1:i2], irx[i1:i2], vel, rho, dz, dx, dt, tmax,
                         location_flag="index", data_format=Float64, order=2, free_surface=true, npad=10)
 
 scp -r wgao1@saig-ml.physics.ualberta.ca:/home/wgao1/Desktop/BP/near_boat /Users/wenlei/Desktop/BP
@@ -75,15 +77,15 @@ scp -r wgao1@saig-ml.physics.ualberta.ca:/home/wgao1/Desktop/BP/near_boat $HOME/
 
 # resample the recordings from 0.8 ms to 4ms
 dir_work = joinpath(homedir(), "Desktop/BP");
-dt_new = 0.004; dt = 0.0008;
+dt_new = 0.016; dt = 0.0008;
 interval = floor(Int64, dt_new/dt)-1;
 
-ns = 40;
+ns = 320;
 dir_near = joinpath(dir_work, "near_boat");
-dir_near_4ms = joinpath(dir_work, "near_boat_4ms");
+dir_near_resample = joinpath(dir_work, "near_boat_16ms");
 for i =1 : ns
     path_in  = join([dir_near "/recordings_" "$i" ".bin"]);
-    path_out = join([dir_near_4ms "/pressure_" "$i" ".rsf"]);
+    path_out = join([dir_near_resample "/pressure_" "$i" ".rsf"]);
     rec      = read_recordings(path_in)
     p        = rec.p[1:interval:end,:]
 
@@ -104,16 +106,17 @@ for i = 1 : ns
 end
 
 # make a cube
-dir_near_4ms = joinpath(dir_work, "near_boat_4ms");
-path = joinpath(dir_near_4ms, "pressure_1.rsf");
+dir_near_resample = joinpath(dir_work, "near_boat_16ms");
+path = joinpath(dir_near_resample, "pressure_1.rsf");
 hdr  = read_RSheader(path);
 p    = zeros(hdr.data_format, hdr.n1, hdr.n2, ns);
 for i = 1 : ns
-    path = join([dir_near_4ms "/pressure_" "$i" ".rsf"])
+    path = join([dir_near_resample "/pressure_" "$i" ".rsf"])
     (hdr, d) = read_RSdata(path)
     p[:,:,i].= d
 end
 SeisPlotTX(p[:,:,1], cmap="gray", wbox=10, hbox=10);
+SeisPlotTX(p[:,1,:], cmap="gray", wbox=10, hbox=10);
 
 path = joinpath(homedir(), "Desktop/Data_Beijing_Workshop/Marmousi2/near_4ms.rsf");
 hdr  = RegularSampleHeader(p, d1=0.004, d2=12.5, d3=25.0, unit1="s", unit2="meter", unit3="meter");

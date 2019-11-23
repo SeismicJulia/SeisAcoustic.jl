@@ -1,10 +1,11 @@
 using SeisPlot, SeisAcoustic, LinearAlgebra, DSP
 
 # homogeneous velocity and density model
-nz = 101; nx = 301;
-vel = 3000 * ones(nz, nx);  # m/s
-vel[51:end,:] .= 3500;  # m/s
-rho = 2000 * ones(nz, nx);  # kg/m^3
+nz = 100; nx = 201;
+vel = 2800 * ones(nz, nx);  # m/s
+vel[31:end,:] .= 3100;  # m/s
+vel[61:end,:] .= 3500;  # m/s
+rho = 2.0 * ones(nz, nx);  # kg/m^3
 
 # number of PML layers
 npml = 20;
@@ -71,10 +72,30 @@ SeisPlotTX(p2[:,:,500], pclip=98, cmap="seismic", wbox=6, hbox=2);
 norm(p0-p1) / norm(p0)
 norm(p0-p2) / norm(p0)
 
+# dot-product test (linear operator
+irx = collect(1:2:params.nx); irz = 2 * ones(length(irx));
+rec1= multi_step_forward!(irz, irx, src, params);
+
+# band limited random recordings
+w    = ricker(10.0, params.dt);
+hl   = floor(Int64, length(w)/2);
+rec2 = Recordings(irz, irx, params);
+idx_o= [1]
+for i = 1 : rec2.nr
+    tmp = conv(randn(params.nt)*1000, w)
+    copyto!(rec2.p, idx_o[1], tmp, hl+1, params.nt)
+    idx_o[1] = idx_o[1] + params.nt
+end
+p1 = multi_step_adjoint!(rec2, src, params);
+
+tmp1 = dot(p1, src.p)
+tmp2 = dot(vec(rec2.p), vec(rec1.p))
+(tmp1-tmp2) / tmp1
+
 # ==============================================================================
 #                          simultaneouse source
 # ==============================================================================
-isx = collect(5:60:295); ns=length(isx); isz = 2*ones(ns);
+isx = collect(5:40:params.nx); ns=length(isx); isz = 2*ones(ns);
 ot  = 0.5*rand(ns);
 src = get_multi_sources(isz, isx, params; amp=100000, ot=ot, fdom=15);
 
@@ -110,6 +131,42 @@ SeisPlotTX(p1[:,:,500], pclip=98, cmap="seismic", wbox=6, hbox=2);
 SeisPlotTX(p2[:,:,500], pclip=98, cmap="seismic", wbox=6, hbox=2);
 norm(p0-p1) / norm(p0)
 norm(p0-p2) / norm(p0)
+
+irx = collect(1:2:params.nx); irz = 2 * ones(length(irx));
+rec1= multi_step_forward!(irz, irx, src, params);
+
+# band limited random recordings
+w    = ricker(10.0, params.dt);
+hl   = floor(Int64, length(w)/2);
+rec2 = Recordings(irz, irx, params);
+idx_o= [1]
+for i = 1 : rec2.nr
+    tmp = conv(randn(params.nt)*1000, w)
+    copyto!(rec2.p, idx_o[1], tmp, hl+1, params.nt)
+    idx_o[1] = idx_o[1] + params.nt
+end
+p1 = multi_step_adjoint!(rec2, src, params);
+
+tmp1 =[0.0];
+for i = 1 : ns
+    tmp1[1] = tmp1[1] + dot(p1[i], src[i].p)
+end
+tmp2 = dot(vec(rec2.p), vec(rec1.p))
+(tmp1[1]-tmp2) / tmp2
+
+# save the adjoint wavefield
+path_spt = joinpath(homedir(), "Desktop/snapshot.rsb" );
+path_wfd = joinpath(homedir(), "Desktop/wavefield.rsb");
+path_pre = joinpath(homedir(), "Desktop/pressure.rsb" );
+
+multi_step_adjoint_test(rec, params; path_spt=path_spt, path_wfd=path_wfd,
+                    path_pre = path_pre, interval=1);
+
+(hdr_s, s) = read_RSdata(path_spt);
+(hdr_w, w) = read_RSdata(path_wfd);
+(hdr_p, p) = read_RSdata(path_pre);
+i = 20;
+SeisPlotTX(p[:,:,i], pclip=98, cmap="seismic", wbox=10, hbox=5);
 
 # ==============================================================================
 #                   dot-product test forward and adjoint operator
@@ -161,92 +218,3 @@ tmp2 = (dot(spt2_f.vz, spt2_b.vz) + dot(spt2_f.vx, spt2_b.vx)
       + dot(spt2_f.pz, spt2_b.pz) + dot(spt2_f.px, spt2_b.px))
 
 (tmp1-tmp2) / tmp1
-
-
-# ==============================================================================
-#                   dot-product test forward and adjoint operator
-# ==============================================================================
-irx = collect(1:2:params.nx); irz = 2 * ones(length(irx));
-rec1= multi_step_forward!(irz, irx, src, params);
-
-# band limited random recordings
-w    = ricker(10.0, params.dt)
-hl   = floor(Int64, length(w)/2)
-rec2 = Recordings(irz, irx, params);
-idx_o= [1]
-for i = 1 : rec2.nr
-    tmp = conv(randn(params.nt)*1000, w)
-    copyto!(rec2.p, idx_o[1], tmp, hl+1, params.nt)
-    idx_o[1] = idx_o[1] + params.nt
-end
-p1 = multi_step_adjoint!(rec2, src, params);
-
-tmp1 = dot(p1, src.p)
-tmp2 = dot(vec(rec2.p), vec(rec1.p))
-(tmp1-tmp2) / tmp1
-
-# using SeisPlot, SeisAcoustic
-#
-# # homogeneous velocity and density model
-# path_vel = joinpath(homedir(), "Desktop/vp.bin")
-# fid = open(path_vel)
-# vel = zeros(Float32, 750*150); read!(fid, vel); close(fid);
-# vel = reshape(vel, 750, 150); vel = permutedims(vel, [2,1]);
-#
-# path_rho = joinpath(homedir(), "Desktop/rho.bin");
-# fid = open(path_rho)
-# rho = zeros(Float32, 750*150); read!(fid, rho); close(fid);
-# rho = reshape(rho, 750, 150); rho = permutedims(rho, [2,1]);
-#
-# # number of PML layers
-# npml = 20;
-#
-# # top boundary condition
-# free_surface = true;
-#
-# # vertical and horizontal grid size
-# dz = 10; dx = 10;
-#
-# # time step size and maximum modelling length
-# dt = 0.0015; tmax = 2.25;  # use second as unit
-#
-# # organize these parameters into a structure
-# params2 = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
-#          data_format=Float64, fd_flag="taylor", order=2, npml=20, apml=900.);
-# params6 = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
-#          data_format=Float64, fd_flag="taylor", order=6, npml=20, apml=900.);
-#
-# # initialize a source
-# src = Source(2, 375, params; ot=0.0, fdom=10.0,
-#       type_flag="ricker", amp=100000, location_flag="index");
-#
-#
-# # initialize recordings
-# irx = collect(1:2:params.nx);
-# irz = 2 * ones(length(irx));
-# rec2 = Recordings(irz, irx, params);
-# rec6 = Recordings(irz, irx, params);
-#
-#
-# # forward modeling of simultaneous sources
-# multi_step_forward!(rec2, src , params2);
-# multi_step_forward!(rec6, src , params6);
-# SeisPlotTX(rec2.p, wbox=10, hbox=10, cmap="seismic");
-# SeisPlotTX(rec6.p, wbox=10, hbox=10, cmap="seismic");
-# SeisPlotTX(rec6.p-rec2.p, wbox=10, hbox=10, cmap="seismic");
-#
-# tmp = hcat(rec2.p, rec6.p, rec6.p-rec2.p);
-# SeisPlotTX(tmp, wbox=30, hbox=10, cmap="seismic");
-#
-# # save the pressure field
-# path_pre2 = joinpath(homedir(), "Desktop/pressure2.rsb");
-# path_pre6 = joinpath(homedir(), "Desktop/pressure6.rsb");
-#
-# # multi_step_forward!(path_pre, src, params; save_flag="pressure");
-# multi_step_forward!(path_pre2, src, params2; save_flag="pressure");
-# multi_step_forward!(path_pre6, src, params6; save_flag="pressure");
-# (hdr, p0) = read_RSdata(path_pre6);
-#
-# it = 300; SeisPlotTX(p0[:,:,it], wbox=15, hbox=3, cmap="seismic", name="/Users/wenlei/Desktop/spt300.pdf");
-# it = 600; SeisPlotTX(p0[:,:,it], wbox=15, hbox=3, cmap="seismic", name="/Users/wenlei/Desktop/spt600.pdf");
-# it = 900; SeisPlotTX(p0[:,:,it], wbox=15, hbox=3, cmap="seismic", name="/Users/wenlei/Desktop/spt900.pdf");

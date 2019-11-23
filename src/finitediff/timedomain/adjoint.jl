@@ -107,7 +107,7 @@ end
 """
    save the adjoint snapshot, wavefield or pressure field
 """
-function multi_step_adjoint!(rec::Recordings, params::TdParams;
+function multi_step_adjoint_test(rec::Recordings, params::TdParams;
                              path_spt="NULL", path_wfd="NULL" , path_pre="NULL", interval=200)
 
     # initialize intermediate variables
@@ -125,21 +125,21 @@ function multi_step_adjoint!(rec::Recordings, params::TdParams;
     # the time range of source function
     if path_spt != "NULL"
        hdr_spt = snapshot_header(params, interval)
-       fid_spt = write_RSheader(path, hdr_spt)
+       fid_spt = write_RSheader(path_spt, hdr_spt)
        append_one_snapshot(fid_spt, spt2)
     end
 
     # save wavefield
     if path_wfd != "NULL"
        hdr_wfd = wavefield_header(params, interval)
-       fid_wfd = write_RSheader(path, hdr_wfd)
+       fid_wfd = write_RSheader(path_wfd, hdr_wfd)
        append_one_wavefield(fid_wfd, spt2, params)
     end
 
     # save pressure
     if path_pre != "NULL"
        hdr_pre = pressure_header(params, interval)
-       fid_pre = write_RSheader(path, hdr_pre)
+       fid_pre = write_RSheader(path_pre, hdr_pre)
        append_one_pressure(fid_pre, spt2, params)
     end
 
@@ -166,9 +166,23 @@ function multi_step_adjoint!(rec::Recordings, params::TdParams;
     # reverse the time order of the adjoint wavefield
     if path_spt != "NULL"
        tmp_dir = splitdir(path_spt)
-       path_tmp= joinpath(tmp_dir[1], "tmp_reverse_file.rsb")
-       reverse_order(path_tmp, path_spt; save_flag=save_flag)
-       mv(path_tmp, path, force=true)
+       path_tmp= joinpath(tmp_dir[1], "spt_reverse_file.rsb")
+       reverse_order(path_tmp, path_spt; save_flag="snapshot")
+       mv(path_tmp, path_spt, force=true)
+    end
+
+    if path_wfd != "NULL"
+       tmp_dir = splitdir(path_wfd)
+       path_tmp= joinpath(tmp_dir[1], "wfd_reverse_file.rsb")
+       reverse_order(path_tmp, path_wfd; save_flag="wavefield")
+       mv(path_tmp, path_wfd, force=true)
+    end
+
+    if path_pre != "NULL"
+       tmp_dir = splitdir(path_pre)
+       path_tmp= joinpath(tmp_dir[1], "pre_reverse_file.rsb")
+       reverse_order(path_tmp, path_pre; save_flag="pressure")
+       mv(path_tmp, path_pre, force=true)
     end
 
     return nothing
@@ -178,12 +192,21 @@ end
    the adjoint operator of one point source simulation, only used for testing the
 dot product test
 """
-function multi_step_adjoint!(rec::Recordings, src::Source, params::TdParams)
+function multi_step_adjoint!(rec::Recordings, src::Ts, params::TdParams) where {Ts<:Union{Source,Vector{Source}}}
+
+    # make the source as a vector has one element
+    if Ts <: Source
+       srcs    = Vector{Source}(undef,1)
+       srcs[1] = src
+    else
+       srcs    = src
+    end
+    ns = length(srcs)
 
     # initialize intermediate variables
-    spt1 = Snapshot(params)
-    spt2 = Snapshot(params)
-    tmp  = zeros(params.data_format, params.Nz * params.Nx)
+    spt1   = Snapshot(params)
+    spt2   = Snapshot(params)
+    tmp    = zeros(params.data_format, params.Nz * params.Nx)
     tmp_z1 = zeros(params.data_format, params.Nz)
     tmp_z2 = zeros(params.data_format, params.Nz)
     tmp_x1 = zeros(params.data_format, params.Nx)
@@ -192,13 +215,19 @@ function multi_step_adjoint!(rec::Recordings, src::Source, params::TdParams)
     # inject the recordings to the last snapshot
     inject_rec2spt!(spt2, rec, params.nt)
 
-    # the time range of source function
-    p   = zeros(params.data_format, src.it_max - src.it_min + 1)
-    idx = src.src2spt
+    # allocate memmory for output
+    p   = Vector{Vector{params.data_format}}(undef, ns)
+    idx = zeros(Int64, ns)
+    for i = 1 : ns
+        p[i]   = zeros(params.data_format, srcs[i].it_max - srcs[i].it_min + 1)
+        idx[i] = srcs[i].src2spt
+    end
 
-    if src.it_min <= params.nt <= src.it_max
-       i = params.nt - src.it_min + 1
-       p[i] = spt2.px[idx] * src.dt
+    for i = 1 : ns
+        if srcs[i].it_min <= params.nt <= srcs[i].it_max
+           j = params.nt - srcs[i].it_min + 1
+           p[i][j] = spt2.px[idx[i]] * srcs[i].dt
+        end
     end
 
     # back propagation
@@ -207,15 +236,21 @@ function multi_step_adjoint!(rec::Recordings, src::Source, params::TdParams)
         one_step_adjoint!(spt1, spt2, params, tmp, tmp_z1, tmp_z2, tmp_x1, tmp_x2)
         inject_rec2spt!(spt1, rec, it)
 
-        if src.it_min <= it <= src.it_max
-           i = it - src.it_min + 1
-           p[i] = spt1.px[idx] * src.dt
+        for i = 1 : ns
+            if srcs[i].it_min <= it <= srcs[i].it_max
+               j = it - srcs[i].it_min + 1
+               p[i][j] = spt1.px[idx[i]] * srcs[i].dt
+            end
         end
 
         copy_snapshot!(spt2, spt1)
     end
 
-    return p
+    if ns == 1
+       return p[1]
+    else
+       return p
+    end
 end
 
 """
