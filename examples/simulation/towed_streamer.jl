@@ -66,24 +66,23 @@ dir_obs = joinpath(dir_work, "far_boat");
 get_shotgather_adaptive(dir_obs, isz_far[i1:i2], isx_far[i1:i2], 1e5*ricker(10.0,dt), irz[i1:i2], irx[i1:i2], vel, rho, dz, dx, dt, tmax,
                         location_flag="index", data_format=Float64, order=2, free_surface=true, npad=10)
 
-scp -r wgao1@saig-ml.physics.ualberta.ca:/home/wgao1/Desktop/BP/near_boat /Users/wenlei/Desktop/BP
-rec = read_recordings("/Users/wenlei/Desktop/BP/near_boat/recordings_2.bin");
-SeisPlotTX(rec.p, cmap="gray", wbox=10, hboz=10);
-
 
 # download data to local machine
-scp -r wgao1@hijitus.physics.ualberta.ca:/home/wgao1/Desktop/BP/far_boat $HOME/Desktop/BP/
-scp -r wgao1@saig-ml.physics.ualberta.ca:/home/wgao1/Desktop/BP/near_boat $HOME/Desktop/BP/
+scp -r wgao1@hijitus.physics.ualberta.ca:/home/wgao1/Desktop/BP/far_boat $HOME/Desktop/BP
+scp -r wgao1@saig-ml.physics.ualberta.ca:/home/wgao1/Desktop/BP/near_boat $HOME/Desktop/synthetic_data/BP
 
 # resample the recordings from 0.8 ms to 4ms
 dir_work = joinpath(homedir(), "Desktop/BP");
-dt_new = 0.016; dt = 0.0008;
-interval = floor(Int64, dt_new/dt)-1;
+dt_new = 0.004; dt = 0.0008;
+interval = floor(Int64, dt_new/dt);
 
-ns = 320;
+# near boat
+ns = 510; # total number of shots
 dir_near = joinpath(dir_work, "near_boat");
-dir_near_resample = joinpath(dir_work, "near_boat_16ms");
+dir_near_resample = joinpath(dir_work, "near_boat_4ms");
+mkdir(dir_near_resample)
 for i =1 : ns
+    println("processed $i shot")
     path_in  = join([dir_near "/recordings_" "$i" ".bin"]);
     path_out = join([dir_near_resample "/pressure_" "$i" ".rsf"]);
     rec      = read_recordings(path_in)
@@ -93,20 +92,7 @@ for i =1 : ns
     write_RSdata(path_out, hdr, p)
 end
 
-dir_far = joinpath(dir_work, "far_boat");
-dir_far_4ms = joinpath(dir_work, "far_boat_4ms");
-for i = 1 : ns
-    path_in  = join([dir_far "/recordings_" "$i" ".bin"]);
-    path_out = join([dir_far_4ms "/pressure_" "$i" ".rsf"]);
-    rec      = read_recordings(path_in)
-    p        = rec.p[1:interval:end,:]
-
-    hdr      = RegularSampleHeader(p, d1=dt_new, d2=12.5)
-    write_RSdata(path_out, hdr, p)
-end
-
-# make a cube
-dir_near_resample = joinpath(dir_work, "near_boat_16ms");
+dir_near_resample = joinpath(dir_work, "near_boat_4ms");
 path = joinpath(dir_near_resample, "pressure_1.rsf");
 hdr  = read_RSheader(path);
 p    = zeros(hdr.data_format, hdr.n1, hdr.n2, ns);
@@ -115,25 +101,160 @@ for i = 1 : ns
     (hdr, d) = read_RSdata(path)
     p[:,:,i].= d
 end
-SeisPlotTX(p[:,:,1], cmap="gray", wbox=10, hbox=10);
-SeisPlotTX(p[:,1,:], cmap="gray", wbox=10, hbox=10);
+pathout = joinpath(dir_work, "near_boat_4ms.rsf");
+hdr     = RegularSampleHeader(p, d1=dt_new, d2=12.5, d3=25.0, title="near boat shots");
+write_RSdata(pathout, hdr, p);
+rm(dir_near_resample, recursive=true);
 
-path = joinpath(homedir(), "Desktop/Data_Beijing_Workshop/Marmousi2/near_4ms.rsf");
-hdr  = RegularSampleHeader(p, d1=0.004, d2=12.5, d3=25.0, unit1="s", unit2="meter", unit3="meter");
-write_RSdata(path, hdr, p);
 
-dir_far_4ms = joinpath(dir_work, "far_boat_4ms");
-path = joinpath(dir_far_4ms, "pressure_1.rsf");
+# far boat
+dir_far = joinpath(dir_work, "far_boat");
+dir_far_resample = joinpath(dir_work, "far_boat_4ms");
+mkdir(dir_far_resample)
+for i = 1 : ns
+    println("processed $i shot")
+    path_in  = join([dir_far "/recordings_" "$i" ".bin"]);
+    path_out = join([dir_far_resample "/pressure_" "$i" ".rsf"]);
+    rec      = read_recordings(path_in)
+    p        = rec.p[1:interval:end,:]
+
+    hdr      = RegularSampleHeader(p, d1=dt_new, d2=12.5)
+    write_RSdata(path_out, hdr, p)
+end
+
+# make a cube
+path = joinpath(dir_far_resample, "pressure_1.rsf");
 hdr  = read_RSheader(path);
 p    = zeros(hdr.data_format, hdr.n1, hdr.n2, ns);
 for i = 1 : ns
-    path = join([dir_far_4ms "/pressure_" "$i" ".rsf"])
+    path = join([dir_far_resample "/pressure_" "$i" ".rsf"])
     (hdr, d) = read_RSdata(path)
     p[:,:,i].= d
 end
-path = joinpath(homedir(), "Desktop/Marmousi2/far_4ms.rsf");
-hdr  = RegularSampleHeader(p, d1=0.004, d2=12.5, d3=25.0, unit1="s", unit2="meter", unit3="meter");
-write_RSdata(path, hdr, p);
+pathout = joinpath(dir_work, "far_boat_4ms.rsf");
+hdr     = RegularSampleHeader(p, d1=dt_new, d2=12.5, d3=25.0, title="far boat shots");
+write_RSdata(pathout, hdr, p);
+rm(dir_far_resample, recursive=true);
+
+# download data to local machine
+scp -r wgao1@saig-ml.physics.ualberta.ca:/home/wgao1/Desktop/BP/near_boat_4ms.rsf $HOME/Desktop/synthetic_data/BP
+scp -r wgao1@saig-ml.physics.ualberta.ca:/home/wgao1/Desktop/BP/far_boat_4ms.rsf $HOME/Desktop/synthetic_data/BP
+
+# apply time shift to far boat data and formulate blended super-gather
+dir_work   = joinpath(homedir(), "Desktop/synthetic_data/BP")
+path_near  = joinpath(dir_work, "near_boat_4ms.rsf");
+(hdr1, p1) = read_RSdata(path_near);
+
+path_far   = joinpath(dir_work, "far_boat_4ms.rsf");
+(hdr2, p2) = read_RSdata(path_far);
+
+i3=1;
+SeisPlotTX(p1[:,:,i3], cmap="gray", wbox=10, hbox=10);
+
+i2 = 1;
+SeisPlotTX(p1[:,i2,:], cmap="gray", wbox=10, hbox=10);
+
+i3=1;
+SeisPlotTX(p2[:,:,i3], cmap="gray", wbox=10, hbox=10);
+
+i2 = 1;
+SeisPlotTX(p2[:,i2,:], cmap="gray", wbox=10, hbox=10);
+
+time_delay = -1.75 * rand(hdr1.n3)     # make distribution same as PGS data
+hdr_time   = RegularSampleHeader(time_delay, title="time_delay applied to far boat");
+path_time  = joinpath(dir_work, "time_delay.rsf");
+write_RSdata(path_time, hdr_time, time_delay);
+
+for i = 1 : hdr2.n3
+    tmp = copy(p2[:,:,i])
+    tmp1= time_shift(tmp, time_delay[i]*ones(hdr2.n2), hdr2.d1)
+    p2[:,:,i] .= tmp1
+    println("$i")
+end
+p1 .= p1 .+ p2;
+
+i2 = 1;
+SeisPlotTX(p1[:,i2,:], cmap="gray", wbox=10, hbox=10);
+
+hdr_blend1 = RegularSampleHeader(p1, d1=hdr1.d1, d2=hdr1.d2, d3=hdr1.d3, title="blended data with near boat aligned");
+path_blend1= joinpath(dir_work, "near_aligned.rsf");
+write_RSdata(path_blend1, hdr_blend1, p1);
+
+# make far boat data aligned
+for i = 1 : hdr1.n2
+    tmp = copy(p1[:,i,:])
+    tmp1= time_shift(tmp, -time_delay, hdr1.d1)
+    p1[:,i,:] .= tmp1
+    println("$i")
+end
+i2 = 1;
+SeisPlotTX(p1[:,i2,:], cmap="gray", wbox=10, hbox=10);
+
+hdr_blend2 = RegularSampleHeader(p1, d1=hdr1.d1, d2=12.5, d3=25.0, title="blended data with far boat aligned");
+path_blend2= joinpath(dir_work, "far_aligned.rsf");
+write_RSdata(path_blend2, hdr_blend2, p1);
+
+dir_pgs   = joinpath(homedir(), "Desktop/synthetic_data/PGS");
+path_near = joinpath(dir_pgs, "data.rsf");
+(hdr, d1) = read_RSdata(path_near);
+dir_BP   = joinpath(homedir(), "Desktop/synthetic_data/BP");
+path_near = joinpath(dir_BP, "near_aligned.rsf");
+(hdr, p1) = read_RSdata(path_near);
+
+i2 = 1;
+SeisPlotTX(p1[:,i2,:], cmap="gray", wbox=10, hbox=10);
+SeisPlotTX(d1[:,i2,:], cmap="gray", wbox=10, hbox=10);
+
+# write them as a binary
+dir_BP    = joinpath(homedir(), "Desktop/synthetic_data/BP");
+path_near = joinpath(dir_BP, "near_aligned.rsf");
+(hdr, p1_blend) = read_RSdata(path_near);
+
+path_input_near = joinpath(dir_BP, "input_near_aligned.bin");
+fid = open(path_input_near, "w");
+write(fid, vec(p1_blend)); close(fid);
+
+path_near = joinpath(dir_BP, "near_boat_4ms.rsf");
+(hdr, p1_clear) = read_RSdata(path_near);
+
+path_target_near = joinpath(dir_BP, "target_near_aligned.bin");
+fid = open(path_target_near, "w");
+write(fid, vec(p1_clear)); close(fid);
+
+# write far boat data
+dir_BP    = joinpath(homedir(), "Desktop/synthetic_data/BP");
+path_far = joinpath(dir_BP, "far_aligned.rsf");
+(hdr, p2_blend) = read_RSdata(path_far);
+
+path_input_far = joinpath(dir_BP, "input_far_aligned.bin");
+fid = open(path_input_far, "w");
+write(fid, vec(p2_blend)); close(fid);
+
+path_far = joinpath(dir_BP, "far_boat_4ms.rsf");
+(hdr, p2_clear) = read_RSdata(path_far);
+
+path_target_far = joinpath(dir_BP, "target_far_aligned.bin");
+fid = open(path_target_far, "w");
+write(fid, vec(p2_clear)); close(fid);
+
+dir_BP     = joinpath(homedir(), "Desktop/synthetic_data/BP");
+path_delay = joinpath(dir_BP, "time_delay.rsf");
+(hdr, time_delay) = read_RSdata(path_delay);
+
+path_time = joinpath(dir_BP, "time_delay.bin");
+fid = open(path_time, "w");
+write(fid, convert(vector{Float32}, vec(time_delay)); close(fid);
+
+
+
+
+
+i2 = 1;
+SeisPlotTX(p1_blend[:,i2,:], cmap="gray", wbox=10, hbox=10);
+SeisPlotTX(p1_blend[:,i2,:]-p1_clear[:,i2,:], cmap="gray", wbox=10, hbox=10);
+
+
+
 
 
 # ==============================================================================
