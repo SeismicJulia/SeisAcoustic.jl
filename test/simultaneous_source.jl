@@ -1,6 +1,6 @@
 using SeisPlot, SeisAcoustic
 
-dir_work = joinpath(homedir(), "Desktop/lsrtm");
+dir_work = joinpath(homedir(), "Desktop");
 
 path_rho = joinpath(dir_work, "physical_model/rho.rsf");
 path_vel = joinpath(dir_work, "physical_model/vel.rsf");
@@ -10,8 +10,11 @@ path_vel = joinpath(dir_work, "physical_model/vel.rsf");
 (hdr_vel, vel0) = read_RSdata(path_vel);
 
 # # cropped model for imaging
-vel = vel0[1:4:1350,650:4:2300];
-rho = rho0[1:4:1350,650:4:2300];
+vel = vel0[1:4:1350,150:4:2300];
+rho = rho0[1:4:1350,150:4:2300];
+
+SeisPlotTX(vel, wbox=8, hbox=5, cmap="rainbow", vmax=maximum(vel), vmin=minimum(vel)); tight_layout();
+savefig("/Users/wenlei/Desktop/vel.pdf"); close();
 
 # vertical and horizontal grid size
 dz = 6.25; dx = 6.25;
@@ -28,18 +31,61 @@ order        = 5;
 fidiff = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
                   data_format=data_format, order=order);
 
-# initialize recordings
-irx = collect(102:2:302);
+# receiver location
+irx = collect(1: 2: fidiff.nx-10);
 irz = 2 * ones(length(irx));
-rec = Recordings(irz, irx, fidiff);
 
 # source location at isx=100
 isz = 2; isx = 90; ot=0.0;
 src = Source(isz, isx, fidiff; ot=ot, amp=100000, fdom=20, type_flag="miniphase");
-path_pre = joinpath(dir_work, "wavefield/pressure_90.rsf");
-multi_step_forward!(rec, src, fidiff, path_pre=path_pre, interval=20);
-path_shot = joinpath(dir_work, "wavefield/shot_90.rec");
-write_recordings(path_shot, rec);
+
+# single source simulation
+path_pre = joinpath(dir_work, "single_pre.rsf")
+multi_step_forward!(src, fidiff, path_pre=path_pre, interval=2);
+rec = multi_step_forward!(irz, irx, src, fidiff);
+
+
+function wave_animation(path_in::String, path_out="NULL";
+         wbox=6, hbox=6, ox=0.0, dx=5.0, oz=0.0, dz=5.0,
+         vmax="NULL", vmin="NULL", pclip=98,
+         inter=5, cmap="PuOr", aspect="auto", interval=1)
+
+    # get the header information
+    hdr = read_RSheader(path)
+    fid = open(path_pre, "r")
+
+    # byte length of one pressure field
+    pre_length = sizeof(hdr.data_format) * hdr.n1 * hdr.n2
+    d          = zeros(hdr.data_format, hdr.n1, hdr.n2)
+
+    fig = plt.figure(figsize=(wbox, hbox))
+    ims = PyCall.PyObject[]
+
+    for it = 1 : inter : nt
+
+        # the location of pointer
+        location = field_location[:data] + (it-1)*pre_length
+        seek(fid, location)
+
+        # read one pressure field
+        read!(d, fid)
+
+        # set range for plotting
+        if vmax=="NULL" && vmin=="NULL"
+           vmax = quantile(abs.(vec(d)), pclip/100.)
+           vmin = -vmax
+        end
+
+        im = plt.imshow(d, cmap=cmap, vmin=vmin,vmax=vmax,extent=[ox, ox+(size(d,2)-1)*dx, oz+(size(d,1)-1)*dz,oz], aspect=aspect)
+        push!(ims, PyCall.PyObject[im])
+    end
+    close(fid)
+    ani = anim.ArtistAnimation(fig, ims, interval=interval, blit=true)
+    pathout = join([pathout ".mp4"])
+    ani[:save](pathout)
+    return nothing
+end
+
 
 # source location at isx=300
 isx = 310;

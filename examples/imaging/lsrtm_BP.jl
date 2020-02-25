@@ -21,8 +21,12 @@ function lsrtm_BP()
   rho1 = copy(rho); rho1 .= minimum(rho);
   vel1 = copy(vel); vel1 .= vel[1];
 
-  # SeisPlotTX(vel, hbox=1.3*3, wbox=3.7*3, cmap="rainbow", vmin=minimum(vel), vmax=maximum(vel));
-  # SeisPlotTX(rho, hbox=1.3*3, wbox=3.7*3, cmap="rainbow", vmin=minimum(rho), vmax=maximum(rho));
+
+  SeisPlotTX(vel, dx=0.0125, dy=0.0125, yticks=0:2:8, xticks=0:2:19, hbox=1.3*3, wbox=3.7*3, xlabel="X (km)", ylabel="Z (km)", cmap="rainbow", vmin=minimum(vel), vmax=maximum(vel));
+  cbar = colorbar(); cbar.set_label("km/s"); tight_layout(); savefig("/Users/wenlei/Desktop/vel.pdf"); close();
+
+  SeisPlotTX(rho, dx=0.0125, dy=0.0125, yticks=0:2:8, xticks=0:2:19, hbox=1.3*3, wbox=3.7*3, xlabel="X (km)", ylabel="Z (km)", cmap="rainbow", vmin=minimum(rho), vmax=maximum(rho));
+  cbar = colorbar(); cbar.set_label("g/cm^3"); tight_layout(); savefig("/Users/wenlei/Desktop/rho.pdf"); close();
 
   # vertical and horizontal grid size
   dz = 6.25; dx = 6.25;

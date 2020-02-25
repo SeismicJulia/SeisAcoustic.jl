@@ -215,7 +215,7 @@ path_lwfd!= "NULL" : save the last wavefield
 path_sws != "NULL" : save the source-side wavefield strength (preconditioner for RTM)
 """
 function multi_step_forward!(src::Ts, params::TdParams;
-                             path_spt="NULL", path_wfd="NULL" , path_pre="NULL", interval=200,
+                             path_spt="NULL", path_wfd="NULL" , path_pre="NULL", interval=1,
                              path_bnd="NULL", path_lwfd="NULL", path_sws="NULL") where {Ts<:Union{Source, Vector{Source}}}
 
     # initialize some variables

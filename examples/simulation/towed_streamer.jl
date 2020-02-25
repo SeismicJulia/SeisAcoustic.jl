@@ -11,9 +11,11 @@ dir_far  = joinpath(dir_work, "far_boat" );
 
 path_vel  = joinpath(dir_model, "vel.rsf");
 path_rho  = joinpath(dir_model, "rho.rsf");
+path_src  = joinpath(dir_model, "wlet.rsf");
 
 (hdr, vel)  = read_RSdata(path_vel);
 (hdr, rho)  = read_RSdata(path_rho);
+(hdr, wlet) = read_RSdata(path_src);
 
 # reduced physical model
 vel = vel[1:1500, 700:end-700];
@@ -197,7 +199,7 @@ write_RSdata(path_blend2, hdr_blend2, p1);
 dir_pgs   = joinpath(homedir(), "Desktop/synthetic_data/PGS");
 path_near = joinpath(dir_pgs, "data.rsf");
 (hdr, d1) = read_RSdata(path_near);
-dir_BP   = joinpath(homedir(), "Desktop/synthetic_data/BP");
+dir_BP    = joinpath(homedir(), "Desktop/synthetic_data/BP");
 path_near = joinpath(dir_BP, "near_aligned.rsf");
 (hdr, p1) = read_RSdata(path_near);
 
