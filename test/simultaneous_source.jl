@@ -13,14 +13,16 @@ path_vel = joinpath(dir_work, "physical_model/vel.rsf");
 vel = vel0[1:4:1350,150:4:2300];
 rho = rho0[1:4:1350,150:4:2300];
 
-SeisPlotTX(vel, wbox=8, hbox=5, cmap="rainbow", vmax=maximum(vel), vmin=minimum(vel)); tight_layout();
-savefig("/Users/wenlei/Desktop/vel.pdf"); close();
+# plotting velocity model
+SeisPlotTX(vel, wbox=8, hbox=5, cmap="rainbow", vmax=maximum(vel), vmin=minimum(vel),
+           ox=0, dx=0.00625, oy=0, dy=0.00625, xlabel="X (km)", ylabel="Z (km)");
+tight_layout(); savefig("/Users/wenlei/Desktop/vel.pdf"); close();
 
 # vertical and horizontal grid size
 dz = 6.25; dx = 6.25;
 
 # time step size and maximum modelling length
-dt = 0.0007; tmax = 5.0;
+dt = 0.0007; tmax = 6.0;
 
 # top boundary condition
 free_surface = true;
@@ -40,133 +42,80 @@ isz = 2; isx = 90; ot=0.0;
 src = Source(isz, isx, fidiff; ot=ot, amp=100000, fdom=20, type_flag="miniphase");
 
 # single source simulation
+interval = 10;
 path_pre = joinpath(dir_work, "single_pre.rsf")
-multi_step_forward!(src, fidiff, path_pre=path_pre, interval=2);
+multi_step_forward!(src, fidiff, path_pre=path_pre, interval=interval);
+
+# single source recording
 rec = multi_step_forward!(irz, irx, src, fidiff);
+a = quantile(abs.(rec.p[:]), (98/100));
+SeisPlotTX(rec.p; wbox=4, hbox=5, cmap="seismic", vmax=a, vmin=-a,
+           ox=1, dx=1, oy=0.0, dy=0.0007, xlabel="Traces", ylabel="Time (s)")
+tight_layout(); savefig("/Users/wenlei/Desktop/rec.pdf"); close();
 
 
-function wave_animation(path_in::String, path_out="NULL";
-         wbox=6, hbox=6, ox=0.0, dx=5.0, oz=0.0, dz=5.0,
-         vmax="NULL", vmin="NULL", pclip=98,
-         inter=5, cmap="PuOr", aspect="auto", interval=1)
+(hdr, p) = read_RSdata("/Users/wenlei/Desktop/single_pre.rsf");
+a = quantile(abs.(p[:]), (98/100));
+path_pre = "/Users/wenlei/Desktop/move_pre";
+SeisAnimation(path_out, p; wbox=8, hbox=5, cmap="gray", vmax=a, vmin=-a,
+              ox=0, dx=0.00625, oy=0, dy=0.00625, title="wavefield", xlabel="X (km)", ylabel="Z (km)", interval=70)
 
-    # get the header information
-    hdr = read_RSheader(path)
-    fid = open(path_pre, "r")
-
-    # byte length of one pressure field
-    pre_length = sizeof(hdr.data_format) * hdr.n1 * hdr.n2
-    d          = zeros(hdr.data_format, hdr.n1, hdr.n2)
-
-    fig = plt.figure(figsize=(wbox, hbox))
-    ims = PyCall.PyObject[]
-
-    for it = 1 : inter : nt
-
-        # the location of pointer
-        location = field_location[:data] + (it-1)*pre_length
-        seek(fid, location)
-
-        # read one pressure field
-        read!(d, fid)
-
-        # set range for plotting
-        if vmax=="NULL" && vmin=="NULL"
-           vmax = quantile(abs.(vec(d)), pclip/100.)
-           vmin = -vmax
-        end
-
-        im = plt.imshow(d, cmap=cmap, vmin=vmin,vmax=vmax,extent=[ox, ox+(size(d,2)-1)*dx, oz+(size(d,1)-1)*dz,oz], aspect=aspect)
-        push!(ims, PyCall.PyObject[im])
-    end
-    close(fid)
-    ani = anim.ArtistAnimation(fig, ims, interval=interval, blit=true)
-    pathout = join([pathout ".mp4"])
-    ani[:save](pathout)
-    return nothing
+# make the record
+p = rec.p[1:interval:end,:];
+a = quantile(abs.(p[:]), (98/100));
+(nt, nr) = size(p);
+d = zeros(Float32, nt, nr, nt);
+for i = 1 : nt
+    d[1:i,:,i] .= p[1:i,:]
 end
+path_rec = "/Users/wenlei/Desktop/move_rec";
+SeisAnimation(path_rec, d; wbox=4, hbox=5, cmap="gray", vmax=a, vmin=-a,
+              ox=1, dx=1, oy=0.0, dy=0.007, xlabel="Traces", ylabel="Time (s)", interval=35)
 
-
-# source location at isx=300
-isx = 310;
-src = Source(isz, isx, fidiff; ot=ot, amp=100000, fdom=20, type_flag="miniphase");
-path_pre = joinpath(dir_work, "wavefield/pressure_310.rsf");
-multi_step_forward!(rec, src, fidiff, path_pre=path_pre, interval=20);
-path_shot = joinpath(dir_work, "wavefield/shot_310.rec");
-write_recordings(path_shot, rec);
 
 # simultaneouse source survey
-tmax = 7.0;
-fidiff1 = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
+tmax = 12.0;
+fidiff = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
                   data_format=data_format, order=order);
 
-isz = [2,2]; isx = [90, 310]; ot=[0.0, 2.0];
-srcs= get_multi_sources(isz, isx, fidiff1; ot=ot, amp=100000, fdom=20, type_flag="miniphase");
+isz = [2,2,2,2,2]; isx = [90, 180, 270, 360, 450]; ot=[0.0, 2.5, 3.1, 4.7, 5.3];
+srcs= get_multi_sources(isz, isx, fidiff; ot=ot, amp=100000, fdom=20, type_flag="miniphase");
 
-# initialize recordings
-irx = collect(102:2:302);
-irz = 2 * ones(length(irx));
-rec = Recordings(irz, irx, fidiff1);
 
-path_pre = joinpath(dir_work, "wavefield/pressure.rsf");
-multi_step_forward!(rec, srcs, fidiff1, path_pre=path_pre, interval=20);
-path_shot = joinpath(dir_work, "wavefield/shot.rec");
-write_recordings(path_shot, rec);
+# single source simulation
+interval = 20;
+path_pre = joinpath(dir_work, "multiple_pre.rsf")
+multi_step_forward!(srcs, fidiff, path_pre=path_pre, interval=interval);
 
-# plotting
-SeisPlotTX(vel, hbox=3.38*3, wbox=4.13*3, cmap="rainbow", vmin=minimum(vel), vmax=maximum(vel),
-           dx=0.00625, dy=0.00625, xticks=0:0.5:2.5, yticks=0.0:0.5:2.0, ticksize=25,
-           xlabel="X (km)", ylabel="Z (km)", labelsize=25); tight_layout();
-path_fig = joinpath(dir_work, "wavefield/vel.pdf")
-savefig(path_fig, dpi=100); close();
+# single source recording
+rec = multi_step_forward!(irz, irx, srcs, fidiff);
+a = quantile(abs.(rec.p[:]), (98/100));
+SeisPlotTX(rec.p; wbox=4, hbox=5, cmap="seismic", vmax=a, vmin=-a,
+           ox=1, dx=1, oy=0.0, dy=0.0007, xlabel="Traces", ylabel="Time (s)")
+tight_layout(); savefig("/Users/wenlei/Desktop/rec.pdf"); close();
 
-path_pre = joinpath(dir_work, "wavefield/pressure_90.rsf");
-(hdr, d) = read_RSdata(path_pre);
-SeisPlotTX(d[:,:,60], hbox=3.38*3, wbox=4.13*3, pclip=98, cmap="gray",
-           dx=0.00625, dy=0.00625, xticks=0:0.5:2.5, yticks=0.0:0.5:2.0, ticksize=25,
-           xlabel="X (km)", ylabel="Z (km)", labelsize=25); tight_layout();
-path_fig = joinpath(dir_work, "wavefield/pressure_90.pdf")
-savefig(path_fig, dpi=100); close();
 
-path_rec = joinpath(dir_work, "wavefield/shot_90.rec");
-rec      = read_recordings(path_rec);
-SeisPlotTX(rec.p, hbox=3.38*2.14285, wbox=4.13*1.25, pclip=95, cmap="gray",
-           dx=1, dy=0.0007, xticks=0:30:100, yticks=1:1:5, ticksize=25,
-           xlabel="Trace number", ylabel="Time (S)", labelsize=25); tight_layout();
-path_fig = joinpath(dir_work, "wavefield/shot_90.pdf")
-savefig(path_fig, dpi=100); close();
+(hdr, p) = read_RSdata("/Users/wenlei/Desktop/single_pre.rsf");
+a = quantile(abs.(p[:]), (98/100));
+path_pre = "/Users/wenlei/Desktop/move_pre";
+SeisAnimation(path_out, p; wbox=8, hbox=5, cmap="gray", vmax=a, vmin=-a,
+              ox=0, dx=0.00625, oy=0, dy=0.00625, title="wavefield", xlabel="X (km)", ylabel="Z (km)", interval=70)
 
-path_pre = joinpath(dir_work, "wavefield/pressure_310.rsf");
-(hdr, d) = read_RSdata(path_pre);
-SeisPlotTX(d[:,:,60], hbox=3.38*3, wbox=4.13*3, pclip=98, cmap="gray",
-           dx=0.00625, dy=0.00625, xticks=0:0.5:2.5, yticks=0.0:0.5:2.0, ticksize=25,
-           xlabel="X (km)", ylabel="Z (km)", labelsize=25); tight_layout();
-path_fig = joinpath(dir_work, "wavefield/pressure_310.pdf")
-savefig(path_fig, dpi=100); close();
+# make the record
+p = rec.p[1:interval:end,:];
+a = quantile(abs.(p[:]), (98/100));
+(nt, nr) = size(p);
+d = zeros(Float32, nt, nr, nt);
+for i = 1 : nt
+    d[1:i,:,i] .= p[1:i,:]
+end
+path_rec = "/Users/wenlei/Desktop/move_rec";
+SeisAnimation(path_rec, d; wbox=4, hbox=5, cmap="gray", vmax=a, vmin=-a,
+              ox=1, dx=1, oy=0.0, dy=0.007, xlabel="Traces", ylabel="Time (s)", interval=35)
 
-path_rec = joinpath(dir_work, "wavefield/shot_310.rec");
-rec      = read_recordings(path_rec);
-SeisPlotTX(rec.p, hbox=3.38*2.14285, wbox=4.13*1.25, pclip=95, cmap="gray",
-           dx=1, dy=0.0007, xticks=0:30:100, yticks=1:1:5, ticksize=25,
-           xlabel="Trace number", ylabel="Time (S)", labelsize=25); tight_layout();
-path_fig = joinpath(dir_work, "wavefield/shot_310.pdf")
-savefig(path_fig, dpi=100); close();
 
-path_pre = joinpath(dir_work, "wavefield/pressure.rsf");
-(hdr, d) = read_RSdata(path_pre);
-SeisPlotTX(d[:,:,200], hbox=3.38*3, wbox=4.13*3, pclip=98, cmap="gray",
-           dx=0.00625, dy=0.00625, xticks=0:0.5:2.5, yticks=0.0:0.5:2.0, ticksize=25,
-           xlabel="X (km)", ylabel="Z (km)", labelsize=25); tight_layout();
-path_fig = joinpath(dir_work, "wavefield/pressure.pdf")
-savefig(path_fig, dpi=100); close();
 
-path_rec = joinpath(dir_work, "wavefield/shot.rec");
-rec      = read_recordings(path_rec);
-SeisPlotTX(rec.p, hbox=3.38*3, wbox=4.13*1.25, pclip=95, cmap="gray",
-           dx=1, dy=0.0007, xticks=0:30:100, yticks=1:1:7, ticksize=25,
-           xlabel="Trace number", ylabel="Time (S)", labelsize=25); tight_layout();
-path_fig = joinpath(dir_work, "wavefield/shot.pdf")
-savefig(path_fig, dpi=100); close();
+
 
 
 # ==================================kevin model ================================
