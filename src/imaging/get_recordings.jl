@@ -103,18 +103,15 @@ end
 """
    get the observations for multiple single source, parallel computation is implemented
 """
-function get_shotgather(dir_obs::Ts, irz::Ti, irx::Ti, src::T, fidiff::P,
+function get_shotgather(dir_obs::Ts, irz::Ti, irx::Ti, src::T, fidiff::P;
                          location_flag="index") where {Ts<:String, Ti<:Vector, T<:Union{Source, Vector{Source}}, P<:TdParams}
 
     # define function accept named tuple
     function wrap_internal(params::NamedTuple)
 
         # do simulation
-        dobs = multi_step_forward!(params.receiver_z, params.receiver_x, params.source, params.fidiff;
-               location_flag=params.location_flag, path_shot=params.path_obs)
-
-        # save the result to disk
-        # write_recordings(params.path_obs, dobs)
+        multi_step_forward!(params.receiver_z, params.receiver_x, params.source, params.fidiff;
+                            location_flag=params.location_flag, path_shot=params.path_obs)
     end
 
     # create a fold save observations
