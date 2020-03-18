@@ -2,10 +2,10 @@ using SeisPlot, SeisAcoustic, PyPlot
 
 # ==================================kevin model ================================
 # working directory
-dir_work = joinpath(homedir(), "Desktop/simultaneous_source_data");
+dir_work = joinpath(homedir(), "Desktop");
 
 # physical model
-path_vel  = joinpath(dir_work, "velocity_model/kevin_vel.rsf");
+path_vel  = joinpath(dir_work, "kevin_vel.rsf");
 (hdr, vel)= read_RSdata(path_vel);
 vel       = vel[1:2:300,301:700];
 (nz, nx)  = size(vel);
@@ -27,7 +27,7 @@ irx = collect(1:2:nx); nr = length(irx);
 irz = 5 * ones(Int64, length(irx));
 
 # source location
-isx = collect(2:2:20); ns = length(isx);
+isx = collect(2:2:nx); ns = length(isx);
 isz = 2 * ones(ns);
 
 # ==============================================================================
