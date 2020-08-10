@@ -1,23 +1,23 @@
 using SeisPlot, SeisAcoustic, LinearAlgebra, DSP
 
 # homogeneous velocity and density model
-nz = 100; nx = 201;
+nz = 100; nx = 301;
 vel = 2800 * ones(nz, nx);  # m/s
-vel[31:end,:] .= 3100;  # m/s
-vel[61:end,:] .= 3500;  # m/s
-rho = 2.0 * ones(nz, nx);  # kg/m^3
+vel[31:end,:] .= 3500;      # m/s
+rho = 2.0 * ones(nz, nx);   # kg/m^3
+rho[61:end,:] .= 2.5;       # m/s
 
 # number of PML layers
 npml = 20;
 
 # top boundary condition
-free_surface = true;   #(pml or free_surface)
+free_surface = true;        #(pml or free_surface)
 
 # vertical and horizontal grid size
 dz = 10; dx = 10;
 
 # time step size and maximum modelling length
-dt = 0.001; tmax = 3.0;  # use second as unit
+dt = 0.001; tmax = 3.0;     # use second as unit
 
 # organize these parameters into a structure
 params = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
@@ -41,7 +41,7 @@ irz = 2 * ones(length(irx));
 
 # forward modeling of simultaneous sources
 rec       = multi_step_forward!(irz, irx, src, params);
-path_shot = multi_step_forward!(irz, irx, src, params; path_shot="/Users/wenlei/Desktop/test.bin");
+path_shot = multi_step_forward!(irz, irx, src, params; path_shot=joinpath(homedir(), "Desktop/test.bin"));
 rec1      = read_recordings(path_shot);
 recordings_isequal(rec, rec1)
 
