@@ -173,17 +173,14 @@ function get_reflections(dir_obs::Ts, irz::Ti, irx::Ti, src::T, params_hete::P, 
     # define function accept named tuple
     function wrap_get_reflections(params::NamedTuple)
 
-        # get whole observations
-        dobs = Recordings(params.receiver_z, params.receiver_x, params.fidiff_hete; location_flag=params.location_flag)
-        dire = Recordings(params.receiver_z, params.receiver_x, params.fidiff_homo; location_flag=params.location_flag)
-
         # do simulation
-        multi_step_forward!(dobs, params.source, params.fidiff_hete)
-        multi_step_forward!(dire, params.source, params.fidiff_homo)
+        dobs = multi_step_forward!(params.receiver_z, params.receiver_x, params.source, params.fidiff_hete; location_flag=params.location_flag)
+        dire = multi_step_forward!(params.receiver_z, params.receiver_x, params.source, params.fidiff_homo; location_flag=params.location_flag)
 
+        # remove direct wave
         dobs.p .= dobs.p .- dire.p
 
-        # save the result to disk
+        # save the reflections to disk
         write_recordings(params.path_obs, dobs)
     end
 

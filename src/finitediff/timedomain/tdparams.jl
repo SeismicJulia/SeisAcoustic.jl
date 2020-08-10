@@ -214,7 +214,7 @@ function model_smooth(par::Matrix{Tv}, L::Ti; filter_flag="hanning") where {Ti<:
     s = s / sum(s)
 
     # smoothing via 2D convolution
-    par1 = conv2(s,s,par1)
+    par1 = conv(s,s,par1)
 
     # truncate to original size
     par1 = par1[2*L+1:end-2*L, 2*L+1:end-2*L]

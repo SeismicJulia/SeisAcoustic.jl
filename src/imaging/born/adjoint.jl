@@ -360,7 +360,7 @@ function born_approximation_adjoint(path_m::Ts, dir_rec::Ts, dir_sourceside::Ts,
     if mute_index > 0
        p  = reshape(p, fidiff.nz, fidiff.nx)
        p[1:mute_index,:] .= 0.0
-       p  = vec(p) 
+       p  = vec(p)
     end
 
     # apply preconditioner to model parameter

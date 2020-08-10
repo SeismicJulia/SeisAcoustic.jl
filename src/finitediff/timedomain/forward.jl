@@ -197,8 +197,7 @@ function multi_step_forward!(rz::Vector, rx::Vector, src::Ts, params::TdParams;
 
     if path_shot == "NULL"
        return rec
-       # return Recordings(rec.nt, rec.nr, rec.dt, rec.irz, rec.irx, rec.spt2rec,
-       #        convert(Matrix{params.data_format}, rec.p))
+
     else
        write_recordings(path_shot, rec)
        return path_shot
@@ -272,6 +271,7 @@ function multi_step_forward!(src::Ts, params::TdParams;
         # compute source-side wavefield
         path_sws != "NULL" && source_strength!(strength, spt1, spt2, params)
 
+        # inject source term
         add_source!(spt2, src, it)
 
         # write current wavefield to disk

@@ -56,7 +56,6 @@ xlabel("UTM easting (km)")
 ylabel("UTM northing (km)")
 
 
-
 # read the trace header
 work_dir = "/home/wgao1/BP_valhall/line1";
 path_sgy = joinpath(work_dir, "line_666_668.segy");

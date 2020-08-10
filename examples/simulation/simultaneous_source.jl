@@ -139,7 +139,7 @@ path_fig = join([dir_fig "/velocity.pdf"]);
 savefig(path_fig, dpi=100); close();
 
 # plot conventional shot gathers
-index_set = [1,3,6,9]
+index_set = [30, 60, 90, 120, 150, 180]
 for i in index_set
     path_obs = join([dir_con "/recordings_" "$i" ".bin"]);
     rec      = read_recordings(path_obs);
@@ -156,7 +156,7 @@ path_comb1 = joinpath(dir_sim, "boat1_comb.rsf");
 (hdr, c1)  = read_RSdata(path_comb1);
 
 # pseduo-deblended common shot gather
-index_set = [1, 3, 5];
+index_set = [30, 60, 90, 120, 150, 180]
 for i in index_set
     SeisPlotTX(c1[:,:,i], hbox=3.38*2.5, wbox=5, pclip=95, cmap="gray",
                dx=1, dy=0.001, xticks=[], yticks=0.0:0.5:3.5); tight_layout();
@@ -165,7 +165,7 @@ for i in index_set
 end
 
 # pseduo-deblended common receiver gather
-index_set = [60, 120, 180];
+index_set = [30, 60, 90, 120, 150, 180]
 for i in index_set
     SeisPlotTX(c1[:,i,:], hbox=3.38*2.5, wbox=5, pclip=95, cmap="gray",
                dx=1, dy=0.001, xticks=[], yticks=0.0:0.5:3.5); tight_layout();
@@ -178,7 +178,7 @@ path_comb1 = joinpath(dir_sim, "boat2_comb.rsf");
 (hdr, c2)  = read_RSdata(path_comb2);
 
 # pseduo-deblended common shot gather
-index_set = [1, 3, 5];
+index_set = [30, 60, 90, 120, 150, 180]
 for i in index_set
     SeisPlotTX(c2[:,:,i], hbox=3.38*2.5, wbox=5, pclip=95, cmap="gray",
                dx=1, dy=0.001, xticks=[], yticks=0.0:0.5:3.5); tight_layout();
@@ -187,14 +187,13 @@ for i in index_set
 end
 
 # pseduo-deblended common receiver gather
-index_set = [60, 120, 180];
+index_set = [30, 60, 90, 120, 150, 180]
 for i in index_set
     SeisPlotTX(c2[:,i,:], hbox=3.38*2.5, wbox=5, pclip=95, cmap="gray",
                dx=1, dy=0.001, xticks=[], yticks=0.0:0.5:3.5); tight_layout();
     path_fig = join([dir_fig "/boat2_crg_" "$i" ".pdf"]);
     savefig(path_fig, dpi=100); close();
 end
-
 
 # ==============================================================================
 #                          make animation

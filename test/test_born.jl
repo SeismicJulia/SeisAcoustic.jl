@@ -129,6 +129,52 @@ tmp2 = dot(vec(p1), vec(p2))
 (tmp1-tmp2) / tmp1
 
 
+# input and output for born approximation
+path_m1 = joinpath(dir_work, "cgls_model_space/image1.rsf");
+path_m2 = joinpath(dir_work, "cgls_model_space/image2.rsf");
+dir_d1  = joinpath(dir_work, "cgls_data_space/born_forward");
+dir_d2  = dir_obs;
+
+image  = 1000.0 * randn(fidiff.data_format, fidiff.nz*fidiff.nx);
+hdr    = RegularSampleHeader(image, title="random image");
+write_RSdata(path_m1, hdr, image);
+
+# apply operation
+born_params = (irz=irz, irx=irx, dir_sourceside=dir_sourceside, fidiff=fidiff, normalization_flag=true, mute_index=10);
+born_approximation(dir_d1, path_m1, 1; born_params...);
+born_approximation(path_m2, dir_d2, 2; born_params...);
+
+# test
+(hdr, m1) = read_RSdata(path_m1);
+(hdr, m2) = read_RSdata(path_m2);
+tmp1 = dot(m1, m2);
+
+tmp2 = [0.0]
+for i = 1 : length(src)
+    file_name = file_name = join(["recordings_" "$i" ".bin"])
+    rec1 = read_recordings(joinpath(dir_d1, file_name))
+    rec2 = read_recordings(joinpath(dir_d2, file_name))
+    tmp2[1] += dot(rec1.p, rec2.p)
+end
+(tmp2[1]-tmp1) / tmp2[1]
+
+
+# plot
+# rec = read_recordings(joinpath(dir_d1, "recordings_1.bin"));
+# SeisPlotTX(rec.p, dy=dt, cmap="gray", wbox=6, hbox=6);
+# (hdr, m2) = read_RSdata(path_m2);
+# SeisPlotTX(reshape(m2, fidiff.nz, fidiff.nx), cmap="gray", wbox=10, hbox=5);
+# m3 = laplace_filter(reshape(m2, fidiff.nz, fidiff.nx));
+# SeisPlotTX(m3, cmap="gray", wbox=10, hbox=5, pclip=96);
+#
+# tmp = zeros(fidiff.data_format, fidiff.nz, fidiff.nx)
+# for i2 = 1 : fidiff.nx
+#     for i1 = 2 : fidiff.nz
+#         tmp[i1,i2] = (rho[i1,i2]-rho[i1-1,i2]) / (rho[i1,i2]+rho[i1-1,i2])
+#     end
+# end
+# SeisPlotTX(tmp, cmap="gray", wbox=10, hbox=5);
+
 # examine the result
 # i = 50
 # p1 = dres.p[:,i] / maximum(abs.(dres.p[:,i]))

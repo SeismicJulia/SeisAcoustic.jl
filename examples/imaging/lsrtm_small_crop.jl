@@ -2,7 +2,7 @@ using SeisPlot, SeisAcoustic
 
 # ==============================================================================
 #             read physical model
-dir_work = joinpath(homedir(), "Desktop/lsrtm");
+dir_work = joinpath(homedir(), "Desktop");
 
 path_rho = joinpath(dir_work, "physical_model/rho.rsf");
 path_vel = joinpath(dir_work, "physical_model/vel.rsf");
@@ -12,12 +12,13 @@ path_vel = joinpath(dir_work, "physical_model/vel.rsf");
 (hdr_vel, vel) = read_RSdata(path_vel);
 
 # # cropped model for imaging
-z_range = 1:2:300;
+z_range = 1:3:300;
 x_range = 4000:2:4600;
 vel = vel[z_range, x_range];
 rho = rho[z_range, x_range];
 vel = model_smooth(vel, 10);
 
+# used for removing direct arrival
 rho1 = copy(rho); rho1 .= minimum(rho);
 vel1 = copy(vel); vel1 .= vel[1];
 
@@ -28,16 +29,16 @@ vel1 = copy(vel); vel1 .= vel[1];
 dz = 6.25; dx = 6.25;
 
 # time step size and maximum modelling length
-dt = 0.0008; tmax = 1.5;
+dt = 0.0008; tmax = 1.25;
 
-# top boundary condition
+# top absorbing boundary to aviod surface-related multiple
 free_surface = false;
 data_format  = Float32;
-order        = 5;
+order        = 2;
 
 # tdparams for generating observations
 fidiff_hete = TdParams(rho, vel, free_surface, dz, dx, dt, tmax;
-                  data_format=data_format, order=order);
+                       data_format=data_format, order=order);
 
 # tdparams for removing direct arrival
 fidiff_homo = TdParams(rho1, vel1, free_surface, dz, dx, dt, tmax;
@@ -47,14 +48,9 @@ fidiff_homo = TdParams(rho1, vel1, free_surface, dz, dx, dt, tmax;
 fidiff = TdParams(rho1, vel, free_surface, dz, dx, dt, tmax;
                   data_format=data_format, order=order);
 
-# a single source
-isz = 2; isx = fidiff.nx;
-src = Source(isz, isx, fidiff; amp=100000, fdom=20, type_flag="miniphase");
-
 # vector of source
-# isx = collect(10 : 15 : fidiff.nx-10); isz = 2*ones(length(isx));
-# # isx = collect(30 : 70 : fidiff.nx-30); isz = 2*ones(length(isx));
-# src = get_multi_sources(isz, isx, fidiff; amp=100000, fdom=20, type_flag="miniphase");
+isx = collect(30 : 70 : fidiff.nx-30); isz = 2*ones(length(isx));
+src = get_multi_sources(isz, isx, fidiff; amp=100000, fdom=20, type_flag="miniphase");
 
 # receiver location
 irx = collect(1: 2 : fidiff.nx);
@@ -63,162 +59,35 @@ irz = 2 * ones(Int64, length(irx));
 dir_obs        = joinpath(dir_work, "observations");
 dir_sourceside = joinpath(dir_work, "sourceside");
 
+# simulate observed data (direct arrival removed)
 get_reflections(dir_obs, irz, irx, src, fidiff_hete, fidiff_homo);
 get_wavefield_bound(dir_sourceside, src, fidiff);
 
-# dobs = read_recordings(joinpath(dir_obs, "recordings_4.bin"));
+# dobs = read_recordings(joinpath(dir_obs, "recordings_1.bin"));
 # SeisPlotTX(dobs.p, dy=dt, cmap="gray", wbox=6, hbox=6);
 
 # lsrtm
 born_params = (irz=irz, irx=irx, dir_sourceside=dir_sourceside, fidiff=fidiff, normalization_flag=true, mute_index=10);
-(x, his) = cgls(born_approximation, dir_obs; dir_work=dir_work, op_params=born_params,
+(x, his) = cgls(born_approximation, dir_obs; dir_work=dir_work, op_params=born_params, maxIter=25,
                 d_axpby=recordings_axpby!, m_axpby=image_axpby!, d_norm=recordings_norm, m_norm=l2norm_rsf);
 
 
-# check the result
-dir_work = joinpath(homedir(), "Desktop/lsrtm");
-path = joinpath(dir_work, "sourceside/normalization.rsf");
-(hdr, s) = read_RSdata(path);
-
-
-path = joinpath(dir_work, "iterations/iteration_50.rsf");
-(hdr, m) = read_RSdata(path);
-p = m .* vec(s);
-p = reshape(p, 150, 301);
-SeisPlotTX(p, cmap="gray", wbox=10, hbox=5);
-
-
-p1= laplace_filter(p);
-SeisPlotTX(p1, cmap="gray", wbox=10, hbox=5);
-
-
-
-p2 = copy(rho)
-for i2 = 1 : size(p2,2)
-    for i1 = 1 : size(p2, 1)-1
-        p2[i1,i2] = (p2[i1+1,i2]-p2[i1,i2]) / (p2[i1+1,i2]+p2[i1,i2])
-    end
-end
-SeisPlotTX(p2, cmap="gray", wbox=10, hbox=5);
-
-
-
-
-
-
-# input and output for born approximation
-path_m1 = joinpath(dir_work, "cgls_model_space/image1.rsf");
-path_m2 = joinpath(dir_work, "cgls_model_space/image2.rsf");
-dir_d1  = joinpath(dir_work, "cgls_data_space/born_forward");
-dir_d2  = dir_obs;
-
-image  = 1000.0 * randn(fidiff.data_format, fidiff.nz*fidiff.nx);
-hdr    = RegularSampleHeader(image, title="random image");
-write_RSdata(path_m1, hdr, image);
-
-# apply operation
-born_params = (irz=irz, irx=irx, dir_sourceside=dir_sourceside, fidiff=fidiff, normalization_flag=true, mute_index=10);
-born_approximation(dir_d1, path_m1, 1; born_params...);
-born_approximation(path_m2, dir_d2, 2; born_params...);
-
-# test
-(hdr, m1) = read_RSdata(path_m1);
-(hdr, m2) = read_RSdata(path_m2);
-tmp1 = dot(m1, m2);
-
-tmp2 = [0.0]
-for i = 1 : length(src)
-    file_name = file_name = join(["recordings_" "$i" ".bin"])
-    rec1 = read_recordings(joinpath(dir_d1, file_name))
-    rec2 = read_recordings(joinpath(dir_d2, file_name))
-    tmp2[1] += dot(rec1.p, rec2.p)
-end
-(tmp2[1]-tmp1) / tmp2[1]
-
-
-# plot
-# rec = read_recordings(joinpath(dir_d1, "recordings_1.bin"));
-# SeisPlotTX(rec.p, dy=dt, cmap="gray", wbox=6, hbox=6);
-# (hdr, m2) = read_RSdata(path_m2);
-# SeisPlotTX(reshape(m2, fidiff.nz, fidiff.nx), cmap="gray", wbox=10, hbox=5);
-# m3 = laplace_filter(reshape(m2, fidiff.nz, fidiff.nx));
-# SeisPlotTX(m3, cmap="gray", wbox=10, hbox=5, pclip=96);
+## check the result
+# using SeisPlot, SeisAcoustic
+# dir_work = joinpath(homedir(), "Desktop");
+# path = joinpath(dir_work, "sourceside/normalization.rsf");
+# (hdr, s) = read_RSdata(path);
 #
-# tmp = zeros(fidiff.data_format, fidiff.nz, fidiff.nx)
-# for i2 = 1 : fidiff.nx
-#     for i1 = 2 : fidiff.nz
-#         tmp[i1,i2] = (rho[i1,i2]-rho[i1-1,i2]) / (rho[i1,i2]+rho[i1-1,i2])
-#     end
-# end
-# SeisPlotTX(tmp, cmap="gray", wbox=10, hbox=5);
-
-
-# ==============================================================================
-#                      test sources-side wavefield
-# ==============================================================================
-using SeisPlot, SeisAcoustic
-
-#             read physical model
-work_dir = joinpath(homedir(), "Desktop/tmp_LSRTM");
-
-path_rho = joinpath(work_dir, "physical_model/rho.rsf");
-path_vel = joinpath(work_dir, "physical_model/vel.rsf");
-
-# read the physical model
-(hdr_rho, rho) = read_RSdata(path_rho);
-(hdr_vel, vel) = read_RSdata(path_vel);
-
-# # cropped model for imaging
-z_range = 1:2:300;
-x_range = 4000:2:4600;
-vel = vel[z_range, x_range];
-rho = rho[z_range, x_range];
-vel = model_smooth(vel, 10);
-
-# SeisPlotTX(vel, hbox=1.5*2, wbox=3*2, cmap="rainbow", vmin=minimum(vel), vmax=maximum(vel));
-# SeisPlotTX(rho, hbox=1.5*2, wbox=3*2, cmap="rainbow", vmin=minimum(rho), vmax=maximum(rho));
-
-# vertical and horizontal grid size
-dz = 6.25; dx = 6.25;
-
-# time step size and maximum modelling length
-dt = 0.0008; tmax = 1.5;
-
-# top boundary condition
-free_surface = false;
-data_format  = Float32;
-order        = 5;
-
-# get the source-side wavefield boundary
-rho1 = copy(rho); rho1 .= minimum(rho);  # homogenous density model
-params = TdParams(rho1, vel, free_surface, dz, dx, dt, tmax;
-                  data_format=data_format, order=order);
-
-# a single source
-# isz = 2; isx = 50;
-# src = Source(isz, isx, params; amp=100000, fdom=20, type_flag="miniphase");
-
-# vector of source
-isx = collect(30:70:params.nx-30); isz = 2*ones(length(isx));
-src = get_multi_sources(isz, isx, params; amp=100000, fdom=20, type_flag="miniphase");
-
-dir_sourceside = joinpath(work_dir, "sourceside");
-get_wavefield_bound(dir_sourceside, src, params; remove_flag=false);
-
-(hdr1, d1) = read_RSdata(joinpath(dir_sourceside, "normalization.rsf"));
-SeisPlotTX(d1, dy=dt, cmap="rainbow", wbox=6, hbox=3);
-
-(h1, s1) = read_RSdata(joinpath(dir_sourceside, "strength/strength_1.rsf"));
-(h2, s2) = read_RSdata(joinpath(dir_sourceside, "strength/strength_2.rsf"));
-(h3, s3) = read_RSdata(joinpath(dir_sourceside, "strength/strength_3.rsf"));
-(h4, s4) = read_RSdata(joinpath(dir_sourceside, "strength/strength_4.rsf"));
-SeisPlotTX(s1, dy=dt, cmap="rainbow", wbox=6, hbox=3);
-SeisPlotTX(s1+s2, dy=dt, cmap="rainbow", wbox=6, hbox=3);
-SeisPlotTX(s1+s2+s3, dy=dt, cmap="rainbow", wbox=6, hbox=3);
-SeisPlotTX(s1+s2+s3+s4, dy=dt, cmap="rainbow", wbox=6, hbox=3);
-
-# apply the adjoint operator
-path_m = joinpath(work_dir, "model_space/m.rsf");
-dir_rec= joinpath(work_dir, "data_space/observation");
-dir_sourceside = joinpath(work_dir, "sourceside");
-get_born_adjoint(path_m, dir_rec, dir_sourceside, params; path_)
+# path = joinpath(dir_work, "iterations/iteration_1.rsf");
+# (hdr, m) = read_RSdata(path);
+# p = m .* vec(s);
+# p = reshape(p, fidiff.nz, fidiff.nx);
+# p1= laplace_filter(p);
+# SeisPlotTX(p1, cmap="gray", wbox=10, hbox=5, title="RTM");
+#
+# path = joinpath(dir_work, "iterations/iteration_25.rsf");
+# (hdr, m) = read_RSdata(path);
+# p = m .* vec(s);
+# p = reshape(p, fidiff.nz, fidiff.nx);
+# p1= laplace_filter(p);
+# SeisPlotTX(p1, cmap="gray", wbox=10, hbox=5, title="LSRTM");
