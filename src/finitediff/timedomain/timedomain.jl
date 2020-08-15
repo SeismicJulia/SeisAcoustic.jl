@@ -72,7 +72,7 @@ export get_gamma_profile,
        vertical_partial_derivative!,
        horizontal_partial_derivative!,
        one_step_forward!,
-       multi_step_forward!,
+       multi_step_forward,
        pressure_reconstruct_forward,
 # ============= adjoint time stepping =============
        one_step_adjoint!,
