@@ -23,7 +23,7 @@ test_type = [(isz1, isx1, true , Float32, 1.0e-5 ),
              (isz2, isx2, false, Float32, 1.0e-5 ),
              (isz2, isx2, false, Float64, 1.0e-10),
             ]
-@testset "forward modelling and pressure field reconstruction" begin
+@testset "forward modelling and pressure field reconstruction (forward and backward)" begin
 
     for (isz, isx, free_surface, data_format, tol) in test_type
 
@@ -43,15 +43,20 @@ test_type = [(isz1, isx1, true , Float32, 1.0e-5 ),
         # save the pressure field and boundary value
         path_pre  = joinpath(homedir(), "Desktop/pressure.rsf");
         path_bnd  = joinpath(homedir(), "Desktop/boundary_value.rsf");
+        path_lwfd = joinpath(homedir(), "Desktop/last_wfd.rsf");
 
         # forward modeling of simultaneous sources
-        multi_step_forward(source_term, params; path_pre=path_pre, path_bnd=path_bnd);
+        multi_step_forward(source_term, params; path_pre=path_pre, path_bnd=path_bnd, path_lwfd=path_lwfd);
         (hdr, pre1) = read_RSdata(path_pre);
 
         # reconstruct pressure field using boundary infomation
         pre2 = pressure_reconstruct_forward(path_bnd, source_term, params);
 
+        # reconstruct pressure field using boundary infomation
+        pre3 = pressure_reconstruct_backward(path_bnd, path_lwfd, source_term, params);
+
         # compute the difference
         @test sqrt(sum((pre1 .- pre2) .^ 2)) / sqrt(sum(pre1 .^ 2)) < tol
+        @test sqrt(sum((pre1 .- pre3) .^ 2)) / sqrt(sum(pre1 .^ 2)) < tol
     end
 end

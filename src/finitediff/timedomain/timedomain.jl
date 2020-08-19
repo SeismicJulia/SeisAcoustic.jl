@@ -76,7 +76,7 @@ export get_gamma_profile,
        pressure_reconstruct_forward,
 # ============= adjoint time stepping =============
        one_step_adjoint!,
-       multi_step_adjoint!,
+       multi_step_adjoint,
        one_step_backward!,
        pressure_reconstruct_backward
 
