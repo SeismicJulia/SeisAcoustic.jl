@@ -7,6 +7,8 @@ export add_virtual_source,
        sourceside_reconstruct_backward,
        born_approximation_adjoint,
 # # ==================== born =======================
+       born_approximation_forward,
+       born_approximation_adjoint,
        born_approximation,
        recordings_axpby!,
        image_axpby!,

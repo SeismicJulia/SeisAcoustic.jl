@@ -241,11 +241,12 @@ function get_wavefield_bound(dir_sourceside::Ts, src::T, fidiff::P; remove_flag=
     function wrap_get_wavefield_bound(params::NamedTuple)
 
         # do simulation
-        multi_step_forward!(params.source, params.fidiff;
-                            path_bnd=params.path_bnd, path_wfd=params.path_wfd, path_sws=params.path_sws)
+        multi_step_forward(params.source, params.fidiff;
+                           path_bnd=params.path_bnd, path_lwfd=params.path_wfd, path_sws=params.path_sws)
 
         # save the source wavelet
         write_source(params.path_src, params.source)
+
         return nothing
     end
 

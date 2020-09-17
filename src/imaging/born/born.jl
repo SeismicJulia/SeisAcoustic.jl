@@ -5,7 +5,7 @@ function born_approximation(output::Ts, input::Ts, iflag::Ti;
     rm(output, force=true, recursive=true)
 
     if iflag == 1
-       born_approximation_forward!(output, input, irz, irx, dir_sourceside, fidiff;
+       born_approximation_forward(output, input, irz, irx, dir_sourceside, fidiff;
                                   location_flag=location_flag, normalization_flag=normalization_flag, mute_index=mute_index)
 
     elseif iflag == 2
