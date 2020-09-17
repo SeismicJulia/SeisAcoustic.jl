@@ -145,12 +145,6 @@ function read_recordings(path::String)
        error("non-support data format")
     end
 
-    # if 8*(3*nr+2) + 8*(nr*nr+1) > filesize(path)
-    #    data_format = Float32
-    # else
-    #    data_format = Float64
-    # end
-
     # read the time sampling interval
     dt = read(fid, data_format)
 

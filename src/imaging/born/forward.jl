@@ -183,22 +183,23 @@ function born_approximation_forward(irz::Ti, irx::Ti, m::Vector{Tv}, path_bnd::T
     return rec
 end
 
-function wrap_born_forward(params::NamedTuple)
-
-    # read source wavelet
-    src = read_source(params.path_src)
-
-    rec = born_approximation_forward(params.irz, params.irx, params.m, params.path_bnd, src, params.fidiff; location_flag=params.location_flag)
-    write_recordings(params.path_born, rec)
-
-    return nothing
-end
-
 """
    parallel forward born approximation for multiple shots.
 """
 function born_approximation_forward(dir_born::Ts, path_m::Ts, irz::Ti, irx::Ti, dir_sourceside::Ts,
          fidiff::TdParams; location_flag="index", normalization_flag=true, mute_index::Int64=0) where {Ts<:String, Ti<:Vector, T<:Union{Source, Vector{Source}}}
+
+    # wrapper of forward born approximation
+    function wrap_born_forward(params::NamedTuple)
+
+        # read source wavelet
+        src = read_source(params.path_src)
+
+        rec = born_approximation_forward(params.irz, params.irx, params.m, params.path_bnd, src, params.fidiff; location_flag=params.location_flag)
+        write_recordings(params.path_born, rec)
+
+        return nothing
+    end
 
     # create folder to save the result
     rm(dir_born, force=true, recursive=true)

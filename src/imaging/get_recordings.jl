@@ -110,8 +110,8 @@ function get_shotgather(dir_obs::Ts, irz::Ti, irx::Ti, src::T, fidiff::P;
     function wrap_internal(params::NamedTuple)
 
         # do simulation
-        multi_step_forward!(params.receiver_z, params.receiver_x, params.source, params.fidiff;
-                            location_flag=params.location_flag, path_shot=params.path_obs)
+        multi_step_forward(params.source, params.fidiff; rz=params.receiver_z, rx=params.receiver_x, 
+                           location_flag=params.location_flag, path_shot=params.path_obs)
     end
 
     # create a fold save observations
@@ -174,8 +174,8 @@ function get_reflections(dir_obs::Ts, irz::Ti, irx::Ti, src::T, params_hete::P, 
     function wrap_get_reflections(params::NamedTuple)
 
         # do simulation
-        dobs = multi_step_forward!(params.receiver_z, params.receiver_x, params.source, params.fidiff_hete; location_flag=params.location_flag)
-        dire = multi_step_forward!(params.receiver_z, params.receiver_x, params.source, params.fidiff_homo; location_flag=params.location_flag)
+        dobs = multi_step_forward(params.source, params.fidiff_hete; rz=params.receiver_z, rx=params.receiver_x, location_flag=params.location_flag)
+        dire = multi_step_forward(params.source, params.fidiff_homo; rz=params.receiver_z, rx=params.receiver_x, location_flag=params.location_flag)
 
         # remove direct wave
         dobs.p .= dobs.p .- dire.p
